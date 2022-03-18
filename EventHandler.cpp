@@ -1,11 +1,13 @@
 #include <bits/stdc++.h>
+#include <fstream>
+using std::ifstream;
 
 using namespace std;
 
 #define MAX_USER_COUNT 100
 #define CORE_COUNT 2
 #define CONTEXT_SWITCH_TIME 2
-#define MAX_REQUEST_GENERATED 2000
+#define MAX_REQUEST_GENERATED 20
 #define MAX_THREAD_COUNT 1
 #define MAX_BUFFER_SIZE 1000
 
@@ -15,6 +17,7 @@ enum schedulingPolicy{FCFS=1,roundRobin=2};
 enum Distributions { Exponential=1, Uniform, Constant };
 enum bufferStatus {Full=1,Available=2,Empty=3};
 
+ofstream outdata;
 
 class Service_Time {
     public:
@@ -247,6 +250,7 @@ Server::Server(UserData obj){
     }
     serviceTimeObj = Service_Time(obj.meanServiceTime,obj.serviceTimeDistribution);
 }
+
 // true == empty false = data in
 bufferStatus Server::getBufferStatus(){
     if(this->buffer.empty())
@@ -330,14 +334,37 @@ class EventHandler {
         void contextSwitchOut(Event);
         bool IsNextEventTimeBufferEmpty();
         void report(Event);
+        void printState(timeEventTuple);
 };
 
-bool EventHandler::IsNextEventTimeBufferEmpty(){
+bool EventHandler::IsNextEventTimeBufferEmpty() {
         return this->nextEventTime.empty();
 }
-void EventHandler::report(Event e) {
-    cout << e.eventId << "\t" << e.arrivalTime << "\t" << e.departureTime << "\t" << e.waitingTime << endl;
+
+void EventHandler::printState(timeEventTuple te) {
+    cout << gblSystemTime << "\t\t";
+	if (this->serverObj.getServerStatus() == Idle) {
+        cout << "Idle\t\t";
+    }
+    else {
+        cout << "Busy\t\t";
+    }
+	if (this->serverObj.buffer.empty()) {
+		cout << "Empty\t\t";
+	}
+	else {
+        cout << serverObj.buffer.front().arrivalTime << "\t\t";
+    }
+	 	
+
+	cout << te.eventObj.type << "\t\t" << te.eventTime << endl;
+	cout << "==================================================================================================" << endl;
 }
+
+void EventHandler::report(Event e) {
+    outdata << e.eventId << "," << e.arrivalTime << "," << e.departureTime << "," << e.waitingTime << endl;
+}
+
 EventHandler::EventHandler(UserData obj){
     serverObj = Server(obj);
     userDataObj = obj;
@@ -499,21 +526,140 @@ void Simulation::initialize(){
 
 int Core::coreIdIterator = 0;
 
+UserData readFromFile (UserData obj) {
+    string file_name = "";
+    cout << "Enter file name" << endl;
+    cin >> file_name;
+    ifstream indata; 
+    int num; 
+    indata.open(file_name); 
+    if(!indata) { 
+        cerr << "Error: file could not be opened" << endl;
+        exit(1);
+    }
+    indata >> obj.meanServiceTime;
+    indata >> obj.meanTimeoutTime;
+    indata >> num;
+    switch(num) {
+        case Exponential:
+            obj.serviceTimeDistribution = Exponential;
+            break;
+        case Uniform:
+            obj.serviceTimeDistribution = Uniform;
+            break;
+        case Constant:
+            obj.serviceTimeDistribution = Constant;
+            break;
+        default:
+            cout << "Wrong Distribution" << endl;
+            exit(0);
+            break;
+    }
+    indata >> num;
+    switch(num) {
+        case Exponential:
+            obj.timeotTimeDistribution = Exponential;
+            break;
+        case Uniform:
+            obj.timeotTimeDistribution = Uniform;
+            break;
+        case Constant:
+            obj.timeotTimeDistribution = Constant;
+            break;
+        default:
+            cout << "Wrong Distribution" << endl;
+            exit(0);
+            break;
+    }
+    indata >> obj.noOfUsers;
+    //indata >> obj.policy;
+    indata.close();
+    return obj;
+}
+
+UserData manualRead(UserData obj) {
+    cout << "Enter mean service time of server" << endl;
+    cin >> obj.meanServiceTime;
+    cout << "Enter mean Timeout time of request" << endl;
+    cin >> obj.meanTimeoutTime;
+    cout << "Enter service time distribution eg. 1" << endl;
+    cout << "1. Exponential" << endl << "2. Uniform" << endl << "3. Constant" << endl;
+    int a = 0;
+    cin >> a;
+    switch(a) {
+        case Exponential:
+            obj.serviceTimeDistribution = Exponential;
+            break;
+        case Uniform:
+            obj.serviceTimeDistribution = Uniform;
+            break;
+        case Constant:
+            obj.serviceTimeDistribution = Constant;
+            break;
+        default:
+            cout << "Wrong Distribution" << endl;
+            exit(0);
+            break;
+    }
+    cout << "Enter Timeout distribution" << endl;
+    cout << "1. Exponential" << endl << "2. Uniform" << endl << "3. Constant" << endl << "Enter numbers" << endl;
+    cin >> a;
+    switch(a) {
+        case Exponential:
+            obj.timeotTimeDistribution = Exponential;
+            break;
+        case Uniform:
+            obj.timeotTimeDistribution = Uniform;
+            break;
+        case Constant:
+            obj.timeotTimeDistribution = Constant;
+            break;
+        default:
+            cout << "Wrong Distribution" << endl;
+            exit(0);
+            break;
+    }
+    cout << "Enter number of users in the system" << endl;
+    cin >> obj.noOfUsers;
+    // cout << "Enter number scheduling policy" << endl;
+    // cin >> obj.policy;
+}
+
+UserData read(UserData obj) {
+    cout << "Enter input type eg. 1" << endl << "1. Manual" << endl << "2. From a file" << endl;
+    int input_type = 0;
+    cin >> input_type;
+
+    if (input_type == 1) {
+        obj = manualRead(obj);
+    }
+    else {
+        obj = readFromFile(obj);
+    } 
+    return obj;
+}
+
 int main(){
     UserData obj = UserData();
-    obj.meanServiceTime = 20;
-    obj.meanTimeoutTime =10;
-    obj.serviceTimeDistribution = Exponential;
-    obj.timeotTimeDistribution = Uniform;
-    obj.noOfUsers = 10;
+    obj =  read(obj);
+    // obj.meanServiceTime = 20;
+    // obj.meanTimeoutTime =10;
+    // obj.serviceTimeDistribution = Exponential;
+    // obj.timeotTimeDistribution = Uniform;
+    // obj.noOfUsers = 10;
+
+    
+    outdata.open("outfile.csv");
+    outdata << "EventId,Arrival Time,Departure Time,Waiting Time" << endl;
 
     Simulation simObj = Simulation(obj);
     simObj.initialize();
     
-    cout << "Event Id" << "\t" << "Arrival Time" << "\t" << "Departure Time" << "\t" << "Waiting Time" << endl;
+    cout << "Global System Time\t" << "Server Status\t" << "Server Buffer Top Element\t" << "Next Event Type\t" << "Next Event Time" << endl;
 
     while(simObj.eventHandlerObj.IsNextEventTimeBufferEmpty()==false){
         timeEventTuple x = simObj.eventHandlerObj.getNextEvent();
+        simObj.eventHandlerObj.printState(x);
         simObj.time(x);
         simObj.eventHandlerObj.manageEvent(x.eventObj);
     }
