@@ -19,14 +19,11 @@ enum schedulingPolicy{FCFS=1,roundRobin=2}; //scheduling policies the system sup
 enum Distributions { Exponential=1, Uniform, Constant }; // types pof distribution system supports
 enum bufferStatus {Full=1,Available=2,Empty=3}; // buffer status representation
 
-ofstream outdata;
-ofstream outTrace;
+ofstream outdata; // used to write final output data to file "outfile.csv"
+ofstream outTrace; // used to write trace of the system to file "Trace.txt"
 double meanWaitingTime = 0.0;
 double meanResponseTime = 0.0;
 unsigned int request_drops = 0;
-
-ofstream outdata; // used to write final output data to file "outfile.csv"
-ofstream outTrace; // used to write trace of the system to file "Trace.txt"
 
 /**
  * Class Service Time
@@ -636,7 +633,7 @@ void EventHandler::printState(timeEventTuple te) {
     for (int i = 0; i < 4; i++) {
         cout << this->serverObj.coreObj[i].getCoreStatus();
     }
-    cout << "]\t"; outdata << "]\t";
+    cout << "]\t"; outTrace << "]\t";
 
 
 	if (this->serverObj.buffer.empty()) {
