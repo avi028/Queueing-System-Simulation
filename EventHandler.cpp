@@ -19,6 +19,12 @@ enum schedulingPolicy{FCFS=1,roundRobin=2}; //scheduling policies the system sup
 enum Distributions { Exponential=1, Uniform, Constant }; // types pof distribution system supports
 enum bufferStatus {Full=1,Available=2,Empty=3}; // buffer status representation
 
+ofstream outdata;
+ofstream outTrace;
+double meanWaitingTime = 0.0;
+double meanResponseTime = 0.0;
+unsigned int request_drops = 0;
+
 ofstream outdata; // used to write final output data to file "outfile.csv"
 ofstream outTrace; // used to write trace of the system to file "Trace.txt"
 
@@ -201,6 +207,7 @@ class Event {
        double contextSwitchInTime;
        double contextSwitchOutTime;
        double serviceTime;
+       double eventServiceTime;
        double departureTime;
        double waitingTime;
        int core;
@@ -623,14 +630,15 @@ bool EventHandler::IsNextEventTimeBufferEmpty() {
 void EventHandler::printState(timeEventTuple te) {
     cout << gblSystemTime << "\t\t";
     outTrace << gblSystemTime << "\t\t";
-	if (this->serverObj.getServerStatus() == Idle) {
-        cout << "Idle\t\t";
-        outTrace << "Idle\t\t";
+	
+    cout << "[";
+    outTrace << "[";
+    for (int i = 0; i < 4; i++) {
+        cout << this->serverObj.coreObj[i].getCoreStatus();
     }
-    else {
-        cout << "Busy\t\t";
-        outTrace << "Idle\t\t";
-    }
+    cout << "]\t"; outdata << "]\t";
+
+
 	if (this->serverObj.buffer.empty()) {
 		cout << "Empty\t\t";
         outTrace << "Empty\t\t";
@@ -671,7 +679,7 @@ void EventHandler::printState(timeEventTuple te) {
  * @param Event 
  */
 void EventHandler::report(Event e) {
-    outdata << e.eventId << "," << e.arrivalTime << "," << e.departureTime << "," << e.waitingTime<< "," << e.request_count << "," << e.response_count<<","<<e.objectId << endl;
+    outdata << e.eventId << "," << e.arrivalTime << "," << e.departureTime << "," << e.waitingTime<< "," << e.departureTime - e.arrivalTime << "," << e.request_count << "," << e.response_count<<","<<e.objectId << endl;
 }
 
 /**
@@ -780,6 +788,7 @@ void EventHandler::arrive(Event X){
             obj.eventId = requestCount;
             obj.type = arrival;
             obj.serviceTime = this->serverObj.serviceTimeObj.getServiceTime();
+            obj.eventServiceTime = this->serverObj.serviceTimeObj.getServiceTime();
             obj.timeout = gblSystemTime + this->timeoutObj.getTimeout();
             obj.request_count  =1;
             obj.response_count =0;
@@ -791,11 +800,11 @@ void EventHandler::arrive(Event X){
     if(this->serverObj.getServerStatus()==Busy){
 
         if(this->serverObj.getBufferStatus()==Full){
-            printf("System Exit due ot overFlow!!");
-            exit(0);
+            request_drops++;
         }
-        this->serverObj.addEventToBuffer(X);
-
+        else {
+            this->serverObj.addEventToBuffer(X);
+        }
     }
     // if the server is not fully  busy , get a free core and assign the event to the core
     else{
@@ -849,10 +858,11 @@ void EventHandler::depart(Event X){
             X.timeout = gblSystemTime + this->timeoutObj.getTimeout();
             X.arrivalTime = gblSystemTime+X.getRandomThinkTime();
             X.serviceTime = this->serverObj.serviceTimeObj.getServiceTime();
+            X.eventServiceTime = this->serverObj.serviceTimeObj.getServiceTime();
             X.departureTime = 0;
             X.waitingTime =0 ;
-            X.core =0 ;
-            X.thread =0 ;
+            X.core = 0;
+            X.thread = 0;
             X.request_count +=1;
             this->setEvent(X.arrivalTime,X);  
         }
@@ -863,10 +873,10 @@ void EventHandler::depart(Event X){
         X.arrivalTime = gblSystemTime+X.getRandomThinkTime();
         X.timeout = gblSystemTime + this->timeoutObj.getTimeout();
         X.departureTime = 0;
-        X.waitingTime =0 ;
-        X.core =0 ;
-        X.thread =0 ;
-        X.request_count +=1;
+        X.waitingTime = 0;
+        X.core = 0;
+        X.thread = 0;
+        X.request_count += 1;
         this->setEvent(X.arrivalTime,X);  
     }
 }
@@ -905,8 +915,10 @@ void EventHandler::contextSwitchIn(Event X){
     }
     // of the remaining service time is less than the time quantum assign the departure time 
     else {
-        X.departureTime = gblSystemTime + X.serviceTime;
-        X.waitingTime = (X.departureTime - X.arrivalTime) - X.serviceTime;
+        X.departureTime = gblSystemTime + X.eventServiceTime;
+        X.waitingTime = (X.departureTime - X.arrivalTime) - X.eventServiceTime;
+        meanWaitingTime += X.waitingTime;
+        meanResponseTime += X.departureTime - X.arrivalTime; 
         X.type = departure;
         this->setEvent(X.departureTime,X);
     } 
@@ -956,6 +968,7 @@ void Simulation::initialize(){
     obj.type = arrival;
     obj.timeout = eventHandlerObj.gblSystemTime + eventHandlerObj.timeoutObj.getTimeout();
     obj.serviceTime = eventHandlerObj.serverObj.serviceTimeObj.getServiceTime();
+    obj.eventServiceTime = eventHandlerObj.serverObj.serviceTimeObj.getServiceTime();
     obj.contextSwitchInTime = 0.0;
     obj.contextSwitchOutTime = 0.0;
     obj.request_count=1;
@@ -1019,7 +1032,19 @@ void readFromFile (UserData obj) {
             break;
     }
     indata >> obj.noOfUsers;
-    //indata >> obj.policy;
+    indata >> obj.maxRequestPerUser;
+    indata >> num;
+    switch(num) {
+        case FCFS:
+            obj.policy = FCFS;
+            break;
+        case roundRobin:
+            obj.policy = roundRobin;
+            break;
+        default:
+            cout << "Wrong Policy";
+            break;
+    }
     indata.close();
     // return obj;
 }
@@ -1073,8 +1098,21 @@ void manualRead(UserData obj) {
     }
     cout << "Enter number of users in the system" << endl;
     cin >> obj.noOfUsers;
-    // cout << "Enter number scheduling policy" << endl;
-    // cin >> obj.policy;
+    cout << "Enter number of requests per user in the system" << endl;
+    cin >> obj.maxRequestPerUser;
+    cout << "Enter scheduling policy" << endl << "1. FCFS" << endl << "2. Round Robin" << endl;
+    cin >> a;
+    switch(a) {
+        case FCFS:
+            obj.policy = FCFS;
+            break;
+        case roundRobin:
+            obj.policy = roundRobin;
+            break;
+        default:
+            cout << "Wrong Policy";
+            break;
+    }
 }
 
 /**
@@ -1115,12 +1153,12 @@ int main(){
     outdata.open("outfile.csv");
     outTrace.open("Trace.txt");
 
-    outdata << "EventId,Arrival Time,Departure Time,Waiting Time,RequestCount,ResponseCount" << endl;
+    outdata << "Even_Id,Arrival_Time,Departure_Time,Waiting_Time,Response_Time,Request_Count,Response_Count,Object_Id" << endl;
 
     Simulation simObj = Simulation(obj);
     simObj.initialize();
     
-    cout << "Global System Time\t" << "Server Status\t" << "Server Buffer Top Element\t" << "Next Event Type\t" << "Next Event Time" << endl;
+    cout << "Global System Time\t" << "Core Status\t" << "Server Buffer Top Element\t" << "Next Event Type\t" << "Next Event Time" << endl;
 
     while(simObj.eventHandlerObj.IsNextEventTimeBufferEmpty()==false){
         timeEventTuple x = simObj.eventHandlerObj.getNextEvent();
@@ -1128,5 +1166,12 @@ int main(){
         simObj.time(x);
         simObj.eventHandlerObj.manageEvent(x.eventObj);
     }
+
+    outTrace << "Mean Waiting Time = " << meanWaitingTime/simObj.eventHandlerObj.eventIdSeed << endl;
+    outTrace << "Mean Response Time = " << meanResponseTime/simObj.eventHandlerObj.eventIdSeed << endl;
+    outTrace << "Total Request Drops = " << request_drops << endl;
+    cout << "Total Request Drops = " << request_drops << endl;
+    cout << "Mean Waiting Time = " << meanWaitingTime/simObj.eventHandlerObj.eventIdSeed << endl;
+    cout << "Mean Response Time = " << meanResponseTime/simObj.eventHandlerObj.eventIdSeed << endl;
     return 0;
 }
