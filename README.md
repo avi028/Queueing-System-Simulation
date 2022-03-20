@@ -38,7 +38,7 @@ The program accepts following inputs
 There are two ways to give input
     
     - From terminal. Execute the above given commands and give inputs wherever asked.
-    - From file. Put the inputs in a file in the same order mentioned above and every input on different line. Give the name of the file whenever asked.
+    - From file. Put the inputs in a file names "infile.txt" in the same order mentioned above and every input on different line.
 
 # Trace and Output
 
