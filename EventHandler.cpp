@@ -22,6 +22,7 @@ ofstream outdata;
 ofstream outTrace;
 double meanWaitingTime = 0.0;
 double meanResponseTime = 0.0;
+unsigned int request_drops = 0;
 
 class Service_Time {
     public:
@@ -377,7 +378,7 @@ void EventHandler::printState(timeEventTuple te) {
     cout << "[";
     outTrace << "[";
     for (int i = 0; i < 4; i++) {
-        cout << this->serverObj.coreObj[i].getCoreStatus() << ",";
+        cout << this->serverObj.coreObj[i].getCoreStatus();
     }
     cout << "]\t"; outdata << "]\t";
 
@@ -496,11 +497,11 @@ void EventHandler::arrive(Event X){
     if(this->serverObj.getServerStatus()==Busy){
 
         if(this->serverObj.getBufferStatus()==Full){
-            printf("System Exit due ot overFlow!!");
-            exit(0);
+            request_drops++;
         }
-        this->serverObj.addEventToBuffer(X);
-
+        else {
+            this->serverObj.addEventToBuffer(X);
+        }
     }
     else{
         int freeCore =-1;
@@ -815,7 +816,7 @@ int main(){
     UserData obj = UserData();
     //read(obj);
     obj.meanServiceTime = 2;
-    obj.meanTimeoutTime =10;
+    obj.meanTimeoutTime = 10;
     obj.serviceTimeDistribution = Uniform;
     obj.timeotTimeDistribution = Uniform;
     obj.noOfUsers = 5;
@@ -841,6 +842,8 @@ int main(){
 
     outTrace << "Mean Waiting Time = " << meanWaitingTime/simObj.eventHandlerObj.eventIdSeed << endl;
     outTrace << "Mean Response Time = " << meanResponseTime/simObj.eventHandlerObj.eventIdSeed << endl;
+    outTrace << "Total Request Drops = " << request_drops << endl;
+    cout << "Total Request Drops = " << request_drops << endl;
     cout << "Mean Waiting Time = " << meanWaitingTime/simObj.eventHandlerObj.eventIdSeed << endl;
     cout << "Mean Response Time = " << meanResponseTime/simObj.eventHandlerObj.eventIdSeed << endl;
     return 0;
