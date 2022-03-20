@@ -658,7 +658,8 @@ void Simulation::initialize(){
     obj.request_count=1;
     obj.objectId = ++eventHandlerObj.userCount;
     obj.response_count =0;
-   eventHandlerObj.setEvent(0, obj);
+    eventHandlerObj.setEvent(0, obj);
+    eventHandlerObj.userDataObj.noOfUsers--;
 }
 
 int Core::coreIdIterator = 0;
