@@ -380,7 +380,7 @@ void EventHandler::printState(timeEventTuple te) {
     for (int i = 0; i < 4; i++) {
         cout << this->serverObj.coreObj[i].getCoreStatus();
     }
-    cout << "]\t"; outdata << "]\t";
+    cout << "]\t"; outTrace << "]\t";
 
 
 	if (this->serverObj.buffer.empty()) {
@@ -721,18 +721,18 @@ void readFromFile (UserData obj) {
     }
     indata >> obj.noOfUsers;
     indata >> obj.maxRequestPerUser;
-    indata >> num;
-    switch(num) {
-        case FCFS:
-            obj.policy = FCFS;
-            break;
-        case roundRobin:
-            obj.policy = roundRobin;
-            break;
-        default:
-            cout << "Wrong Policy";
-            break;
-    }
+    // indata >> num;
+    // switch(num) {
+    //     case FCFS:
+    //         obj.policy = FCFS;
+    //         break;
+    //     case roundRobin:
+    //         obj.policy = roundRobin;
+    //         break;
+    //     default:
+    //         cout << "Wrong Policy";
+    //         break;
+    // }
     indata.close();
     // return obj;
 }
@@ -783,19 +783,19 @@ void manualRead(UserData obj) {
     cin >> obj.noOfUsers;
     cout << "Enter number of requests per user in the system" << endl;
     cin >> obj.maxRequestPerUser;
-    cout << "Enter scheduling policy" << endl << "1. FCFS" << endl << "2. Round Robin" << endl;
-    cin >> a;
-    switch(a) {
-        case FCFS:
-            obj.policy = FCFS;
-            break;
-        case roundRobin:
-            obj.policy = roundRobin;
-            break;
-        default:
-            cout << "Wrong Policy";
-            break;
-    }
+    // cout << "Enter scheduling policy" << endl << "1. FCFS" << endl << "2. Round Robin" << endl;
+    // cin >> a;
+    // switch(a) {
+    //     case FCFS:
+    //         obj.policy = FCFS;
+    //         break;
+    //     case roundRobin:
+    //         obj.policy = roundRobin;
+    //         break;
+    //     default:
+    //         cout << "Wrong Policy";
+    //         break;
+    // }
 }
 
 void read(UserData obj) {
