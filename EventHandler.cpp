@@ -13,7 +13,7 @@ using namespace std;
 #define TIME_QUANTUM 0.5 // Defined for Round Robin
 
 
-enum serverStatus {Idle = 1, Busy=2}; // 2 states of server
+enum serverStatus {Idle = 1,Free=2, Busy=2}; // 2 states of server
 enum eventType {arrival=1,departure=2,contextSwitchInEvent=3,contextSwitchOutEvent=4}; //types of event dealt with in the simulation
 enum schedulingPolicy{FCFS=1,roundRobin=2}; //scheduling policies the system supports
 enum Distributions { Exponential=1, Uniform, Constant }; // types pof distribution system supports
@@ -355,6 +355,8 @@ double Core::getNextCoreAvailableTime(){
 serverStatus Core::getCoreStatus(){
     if(this->threadBusyCount==MAX_THREAD_COUNT)
         return Busy;
+    if(this->threadBusyCount > 0 )
+        return Free;
     return Idle;
 }
 
@@ -378,6 +380,8 @@ int Core::addToThread(Event obj){
     threadBusyCount = threadBusyCount + 1;
     if(threadBusyCount >= MAX_THREAD_COUNT)
         this->status = Busy;     
+    else if(threadBusyCount >0)
+        this->status =Free;
     return 1;
 }
 
@@ -390,8 +394,10 @@ Event* Core::removeFromThread(){
     Event *obj = threads.front();
     threads.pop();
     this->threadBusyCount = this->threadBusyCount -1;
-    if(this->threadBusyCount < MAX_THREAD_COUNT)
-        this->status = Idle;             
+    if(this->threadBusyCount == 0)
+        this->status = Idle;
+    else if(this->threadBusyCount < MAX_THREAD_COUNT)
+        this->status = Free;             
     return obj;
 }
 
@@ -523,6 +529,15 @@ serverStatus Server::getServerStatus(){
     if(busyCount==CORE_COUNT)
         return Busy;
 
+    busyCount=0;
+    for (int i=0;i<CORE_COUNT;i++){
+        if(this->coreObj[i].getCoreStatus()==Free){
+            busyCount++;
+        }
+    }
+    if(busyCount > 0)
+        return Free;
+        
     return Idle;
 }
 
@@ -632,6 +647,7 @@ void EventHandler::printState(timeEventTuple te) {
     outTrace << "[";
     for (int i = 0; i < 4; i++) {
         cout << this->serverObj.coreObj[i].getCoreStatus();
+        outTrace << this->serverObj.coreObj[i].getCoreStatus();
     }
     cout << "]\t"; outTrace << "]\t";
 
@@ -983,10 +999,10 @@ int Core::coreIdIterator = 0;
  * 
  * @param obj 
  */
-void readFromFile (UserData obj) {
-    string file_name = "";
-    cout << "Enter file name" << endl;
-    cin >> file_name;
+void readFromFile (UserData * obj) {
+    string file_name = "infile.txt";
+    // cout << "Enter file name" << endl;
+    // cin >> file_name;
     ifstream indata; 
     int num; 
     indata.open(file_name); 
@@ -994,18 +1010,18 @@ void readFromFile (UserData obj) {
         cerr << "Error: file could not be opened" << endl;
         exit(1);
     }
-    indata >> obj.meanServiceTime;
-    indata >> obj.meanTimeoutTime;
+    indata >> obj->meanServiceTime;
+    indata >> obj->meanTimeoutTime;
     indata >> num;
     switch(num) {
         case Exponential:
-            obj.serviceTimeDistribution = Exponential;
+            obj->serviceTimeDistribution = Exponential;
             break;
         case Uniform:
-            obj.serviceTimeDistribution = Uniform;
+            obj->serviceTimeDistribution = Uniform;
             break;
         case Constant:
-            obj.serviceTimeDistribution = Constant;
+            obj->serviceTimeDistribution = Constant;
             break;
         default:
             cout << "Wrong Distribution" << endl;
@@ -1015,33 +1031,33 @@ void readFromFile (UserData obj) {
     indata >> num;
     switch(num) {
         case Exponential:
-            obj.timeotTimeDistribution = Exponential;
+            obj->timeotTimeDistribution = Exponential;
             break;
         case Uniform:
-            obj.timeotTimeDistribution = Uniform;
+            obj->timeotTimeDistribution = Uniform;
             break;
         case Constant:
-            obj.timeotTimeDistribution = Constant;
+            obj->timeotTimeDistribution = Constant;
             break;
         default:
             cout << "Wrong Distribution" << endl;
             exit(0);
             break;
     }
-    indata >> obj.noOfUsers;
-    indata >> obj.maxRequestPerUser;
-    indata >> num;
-    switch(num) {
-        case FCFS:
-            obj.policy = FCFS;
-            break;
-        case roundRobin:
-            obj.policy = roundRobin;
-            break;
-        default:
-            cout << "Wrong Policy";
-            break;
-    }
+    indata >> obj->noOfUsers;
+    indata >> obj->maxRequestPerUser;
+    // indata >> num;
+    // switch(num) {
+    //     case FCFS:
+    //         obj.policy = FCFS;
+    //         break;
+    //     case roundRobin:
+    //         obj.policy = roundRobin;
+    //         break;
+    //     default:
+    //         cout << "Wrong Policy";
+    //         break;
+    // }
     indata.close();
     // return obj;
 }
@@ -1051,24 +1067,24 @@ void readFromFile (UserData obj) {
  * 
  * @param obj 
  */
-void manualRead(UserData obj) {
+void manualRead(UserData * obj) {
     cout << "Enter mean service time of server" << endl;
-    cin >> obj.meanServiceTime;
+    cin >> obj->meanServiceTime;
     cout << "Enter mean Timeout time of request" << endl;
-    cin >> obj.meanTimeoutTime;
+    cin >> obj->meanTimeoutTime;
     cout << "Enter service time distribution eg. 1" << endl;
     cout << "1. Exponential" << endl << "2. Uniform" << endl << "3. Constant" << endl;
     int a = 0;
     cin >> a;
     switch(a) {
         case Exponential:
-            obj.serviceTimeDistribution = Exponential;
+            obj->serviceTimeDistribution = Exponential;
             break;
         case Uniform:
-            obj.serviceTimeDistribution = Uniform;
+            obj->serviceTimeDistribution = Uniform;
             break;
         case Constant:
-            obj.serviceTimeDistribution = Constant;
+            obj->serviceTimeDistribution = Constant;
             break;
         default:
             cout << "Wrong Distribution" << endl;
@@ -1080,13 +1096,13 @@ void manualRead(UserData obj) {
     cin >> a;
     switch(a) {
         case Exponential:
-            obj.timeotTimeDistribution = Exponential;
+            obj->timeotTimeDistribution = Exponential;
             break;
         case Uniform:
-            obj.timeotTimeDistribution = Uniform;
+            obj->timeotTimeDistribution = Uniform;
             break;
         case Constant:
-            obj.timeotTimeDistribution = Constant;
+            obj->timeotTimeDistribution = Constant;
             break;
         default:
             cout << "Wrong Distribution" << endl;
@@ -1094,22 +1110,22 @@ void manualRead(UserData obj) {
             break;
     }
     cout << "Enter number of users in the system" << endl;
-    cin >> obj.noOfUsers;
+    cin >> obj->noOfUsers;
     cout << "Enter number of requests per user in the system" << endl;
-    cin >> obj.maxRequestPerUser;
-    cout << "Enter scheduling policy" << endl << "1. FCFS" << endl << "2. Round Robin" << endl;
-    cin >> a;
-    switch(a) {
-        case FCFS:
-            obj.policy = FCFS;
-            break;
-        case roundRobin:
-            obj.policy = roundRobin;
-            break;
-        default:
-            cout << "Wrong Policy";
-            break;
-    }
+    cin >> obj->maxRequestPerUser;
+    // cout << "Enter scheduling policy" << endl << "1. FCFS" << endl << "2. Round Robin" << endl;
+    // cin >> a;
+    // switch(a) {
+    //     case FCFS:
+    //         obj.policy = FCFS;
+    //         break;
+    //     case roundRobin:
+    //         obj.policy = roundRobin;
+    //         break;
+    //     default:
+    //         cout << "Wrong Policy";
+    //         break;
+    // }
 }
 
 /**
@@ -1117,7 +1133,7 @@ void manualRead(UserData obj) {
  * 
  * @param obj 
  */
-void read(UserData obj) {
+void read(UserData *obj) {
     cout << "Enter input type eg. 1" << endl << "1. Manual" << endl << "2. From a file" << endl;
     int input_type = 0;
     cin >> input_type;
@@ -1138,13 +1154,13 @@ void read(UserData obj) {
  */
 int main(){
     UserData obj = UserData();
-    //read(obj);
-    obj.meanServiceTime = 2;
-    obj.meanTimeoutTime =10;
-    obj.serviceTimeDistribution = Exponential;
-    obj.timeotTimeDistribution = Uniform;
-    obj.noOfUsers = 5;
-    obj.maxRequestPerUser = 8;
+    read(&obj);
+    // obj.meanServiceTime = 2;
+    // obj.meanTimeoutTime =10;
+    // obj.serviceTimeDistribution = Exponential;
+    // obj.timeotTimeDistribution = Uniform;
+    // obj.noOfUsers = 5;
+    // obj.maxRequestPerUser = 8;
     obj.policy = roundRobin;
     
     outdata.open("outfile.csv");
