@@ -122,7 +122,8 @@ class Event {
        eventType type;
        double arrivalTime;
        double timeout;
-       int contextSwitchOutTime;
+       double contextSwitchInTime;
+       double contextSwitchOutTime;
        double serviceTime;
        double departureTime;
        double waitingTime;
@@ -470,19 +471,24 @@ void EventHandler::arrive(Event X){
 
     }
     else{
-
         int freeCore =-1;
         freeCore = this->serverObj.getFreeCore();
         double nextAvialableTime = 0.0;
         nextAvialableTime = max(serverObj.coreObj[freeCore].getNextCoreAvailableTime(),gblSystemTime);
         X.core = freeCore;
-        // 
-        X.departureTime = nextAvialableTime + X.serviceTime;
-        X.waitingTime = nextAvialableTime - X.arrivalTime;
-        X.type = departure;
-        serverObj.coreObj[freeCore].addToThread(X);
-        X.thread = this->serverObj.coreObj[freeCore].getBUsyThreadCount();
-        this->setEvent(X.departureTime,X);
+
+        /**
+         * X.cxtswtInTime = nextAvailableTime + gblCxtSwtTime //const
+         * X.type = contextSwtIn
+         * **
+         */
+            serverObj.coreObj[freeCore].addToThread(X);
+            X.thread = this->serverObj.coreObj[freeCore].getBUsyThreadCount();
+         
+         /* 
+         SetEvent X
+         */
+        this->setEvent(X.contextSwitchInTime,X);
     }
 } 
 
@@ -497,12 +503,19 @@ void EventHandler::depart(Event X){
         double nextAvialableTime = 0.0;
         nextAvialableTime = max(serverObj.coreObj[freeCore].getNextCoreAvailableTime(),gblSystemTime);
         A.core = freeCore;
-        A.departureTime = nextAvialableTime + A.serviceTime;
-        A.waitingTime = nextAvialableTime - A.arrivalTime;
-        A.type = departure;
-        serverObj.coreObj[freeCore].addToThread(A);
-        A.thread = this->serverObj.coreObj[freeCore].getBUsyThreadCount();
-        this->setEvent(A.departureTime,A);
+        // roundrobin logic 
+        /**
+         * A.cxtswtInTime = nextAvailableTime + gblCxtSwtTime //const
+         * A.type = contextSwtIn
+         * **
+         */
+            serverObj.coreObj[freeCore].addToThread(A);
+            A.thread = this->serverObj.coreObj[freeCore].getBUsyThreadCount();
+         
+         /* 
+         SetEvent A
+         */
+        this->setEvent(A.contextSwitchInTime,A);
     }
 
     if(X.departureTime < X.timeout){
@@ -539,6 +552,37 @@ void EventHandler::depart(Event X){
 //Round robin
 void EventHandler::contextSwitchOut(Event X){
 
+    /**
+     * remove X from thread
+     * this->serverObj.coreObj[X.core].removeFromThread();
+        double nextAvialableTime = 0.0;
+        nextAvialableTime = max(serverObj.coreObj[freeCore].getNextCoreAvailableTime(),gblSystemTime);
+     * X.contextSwitchInTime  = nextAvialableTime + contextSwitchTime(const);
+         *      addtothread(X)
+     * X.type = contextSwitchIn
+     * add Event X for contextSwitchIn
+     * 
+     */
+
+}
+
+void EventHandler::contextSwitchIn(Event X){
+
+    // roundrobin logic 
+    /**
+
+         * if X.service time > time quantum
+         *      X.service time -=time quantum
+         *      X.contextSwitchOutTime = gblSystemTime + time quantum
+         *      X.type  = contextSwitchOut
+         *      add to event queue
+         * else 
+         *  // as before
+         */
+            X.departureTime = gblSystemTime + X.serviceTime;
+            X.waitingTime = (X.departureTime - X.arrivalTime) - X.serviceTime;
+            X.type = departure;
+            this->setEvent(X.departureTime,X);
 }
 
 class Simulation {
