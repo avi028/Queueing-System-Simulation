@@ -6,10 +6,11 @@ using namespace std;
 
 #define MAX_USER_COUNT 100
 #define CORE_COUNT 4
-#define CONTEXT_SWITCH_TIME 2
+#define CONTEXT_SWITCH_TIME 0.1
 #define MAX_REQUEST_GENERATED 20
 #define MAX_THREAD_COUNT 4
-#define MAX_BUFFER_SIZE 1000
+#define MAX_BUFFER_SIZE 1000 
+#define TIME_QUANTUM 0.5
 
 enum serverStatus {Idle = 1, Busy=2};
 enum eventType {arrival=1,departure=2,contextSwitchInEvent=3,contextSwitchOutEvent=4};
@@ -18,6 +19,7 @@ enum Distributions { Exponential=1, Uniform, Constant };
 enum bufferStatus {Full=1,Available=2,Empty=3};
 
 ofstream outdata;
+ofstream outTrace;
 
 class Service_Time {
     public:
@@ -37,16 +39,14 @@ class Service_Time {
 
     double getServiceTime() {
         double final_service_time = 0.0;
-        srand(time(0));
-        int random_number = rand();
-        double random_number_new = (double)random_number/RAND_MAX;
         std::random_device device;     
         std::mt19937 generator(device());   
         std::uniform_int_distribution<int> dist(2,2*mean_service+2); 
+        std::uniform_real_distribution<float> dist1(0, 1);
 
         switch(ds) {
             case Exponential:
-                final_service_time = -mean_service * log(random_number_new);
+                final_service_time = -mean_service * log(dist1(generator));
                 break;
             
             case Uniform:
@@ -80,16 +80,14 @@ class Timeout {
 
     double getTimeout() {
         double final_timeout = 0.0;
-        srand(time(0));
-        int random_number = rand();
-        double random_number_new = (double)random_number/RAND_MAX;
         std::random_device device;     
         std::mt19937 generator(device());   
         std::uniform_int_distribution<int> dist(1,2*mean_time+1);
+        std::uniform_real_distribution<float> dist1(0, 1);
 
         switch(ds) {
             case Exponential:
-                final_timeout = (-mean_time * log(random_number_new)) + minimum_timeout;
+                final_timeout = (-mean_time * log(dist1(generator))) + minimum_timeout;
                 break;
             
             case Uniform:
@@ -210,7 +208,10 @@ double Core::getNextCoreAvailableTime(){
             nextFreeTime =  threads.back().departureTime;
     }
     else{
-
+        if(threads.empty()==true)
+            nextFreeTime = 0.0;
+        else    
+            nextFreeTime =  max(threads.back().departureTime, threads.back().contextSwitchOutTime);
     }
     return nextFreeTime;
 }
@@ -232,6 +233,7 @@ int Core::addToThread(Event obj){
         this->status = Busy;     
     return 1;
 }
+
 Event Core::removeFromThread(){
     Event obj = threads.front();
     threads.pop();
@@ -367,22 +369,47 @@ bool EventHandler::IsNextEventTimeBufferEmpty() {
 
 void EventHandler::printState(timeEventTuple te) {
     cout << gblSystemTime << "\t\t";
+    outTrace << gblSystemTime << "\t\t";
 	if (this->serverObj.getServerStatus() == Idle) {
         cout << "Idle\t\t";
+        outTrace << "Idle\t\t";
     }
     else {
         cout << "Busy\t\t";
+        outTrace << "Idle\t\t";
     }
 	if (this->serverObj.buffer.empty()) {
 		cout << "Empty\t\t";
+        outTrace << "Empty\t\t";
 	}
 	else {
         cout << serverObj.buffer.front().arrivalTime << "\t\t";
+        outTrace << serverObj.buffer.front().arrivalTime << "\t\t";
     }
 	 	
-
-	cout << te.eventObj.type << "\t\t" << te.eventTime << endl;
+    switch(te.eventObj.type) {
+        case arrival:
+            cout << "Arrival      \t\t";
+            outTrace << "Arrival      \t\t";
+            break;
+        case departure:
+            cout << "Departure    \t\t";
+            outTrace << "Departure    \t\t";
+            break;
+        case contextSwitchInEvent:
+            cout << "Cntx Swtch In\t\t";
+            outTrace << "Cntx Swtch In\t\t";
+            break;
+        case contextSwitchOutEvent:
+            cout << "Cntx Swtch Out\t\t";
+            outTrace << "Cntx Swtch Out\t\t";
+            break; 
+    }
+    
+    cout << "\t\t" << te.eventTime << "\t\t" << endl;
+    outTrace << "\t\t" << te.eventTime << "\t\t" << endl;
 	cout << "==================================================================================================" << endl;
+    outTrace << "==================================================================================================" << endl;
 }
 
 void EventHandler::report(Event e) {
@@ -473,22 +500,23 @@ void EventHandler::arrive(Event X){
     else{
         int freeCore =-1;
         freeCore = this->serverObj.getFreeCore();
-        double nextAvialableTime = 0.0;
-        nextAvialableTime = max(serverObj.coreObj[freeCore].getNextCoreAvailableTime(),gblSystemTime);
+        double nextAvailableTime = 0.0;
+        nextAvailableTime = max(serverObj.coreObj[freeCore].getNextCoreAvailableTime(), gblSystemTime);
         X.core = freeCore;
 
         /**
          * X.cxtswtInTime = nextAvailableTime + gblCxtSwtTime //const
          * X.type = contextSwtIn
+         * add it to thread
+         * add thread to it
+         * set in event queue
          * **
          */
-            serverObj.coreObj[freeCore].addToThread(X);
-            X.thread = this->serverObj.coreObj[freeCore].getBUsyThreadCount();
-         
-         /* 
-         SetEvent X
-         */
-        this->setEvent(X.contextSwitchInTime,X);
+        X.contextSwitchInTime = nextAvailableTime + CONTEXT_SWITCH_TIME;
+        X.type = contextSwitchInEvent;
+        serverObj.coreObj[freeCore].addToThread(X);
+        X.thread = this->serverObj.coreObj[freeCore].getBUsyThreadCount();
+        this->setEvent(X.contextSwitchInTime,X);  
     }
 } 
 
@@ -501,20 +529,21 @@ void EventHandler::depart(Event X){
         int freeCore = -1;
         freeCore = this->serverObj.getFreeCore();
         double nextAvialableTime = 0.0;
-        nextAvialableTime = max(serverObj.coreObj[freeCore].getNextCoreAvailableTime(),gblSystemTime);
+        nextAvialableTime = max(serverObj.coreObj[freeCore].getNextCoreAvailableTime(), gblSystemTime);
         A.core = freeCore;
         // roundrobin logic 
         /**
          * A.cxtswtInTime = nextAvailableTime + gblCxtSwtTime //const
          * A.type = contextSwtIn
+         * add it to thread
+         * add thread to it
+         * set in event queue
          * **
          */
-            serverObj.coreObj[freeCore].addToThread(A);
-            A.thread = this->serverObj.coreObj[freeCore].getBUsyThreadCount();
-         
-         /* 
-         SetEvent A
-         */
+        A.contextSwitchInTime = nextAvialableTime + CONTEXT_SWITCH_TIME;
+        A.type = contextSwitchInEvent;
+        serverObj.coreObj[freeCore].addToThread(A);
+        A.thread = this->serverObj.coreObj[freeCore].getBUsyThreadCount();
         this->setEvent(A.contextSwitchInTime,A);
     }
 
@@ -564,25 +593,40 @@ void EventHandler::contextSwitchOut(Event X){
      * 
      */
 
+    this->serverObj.coreObj[X.core].removeFromThread();
+    double nextAvailableTime = 0.0;
+    nextAvailableTime = max(serverObj.coreObj[X.core].getNextCoreAvailableTime(), gblSystemTime);
+    X.contextSwitchInTime = nextAvailableTime + CONTEXT_SWITCH_TIME;
+    X.type = contextSwitchInEvent;
+    this->serverObj.coreObj[X.core].addToThread(X);
+    this->setEvent(X.contextSwitchInTime, X);
 }
 
 void EventHandler::contextSwitchIn(Event X){
 
     // roundrobin logic 
     /**
+    * if X.service time > time quantum
+    *      X.service time -=time quantum
+    *      X.contextSwitchOutTime = gblSystemTime + time quantum
+    *      X.type  = contextSwitchOut
+    *      add to event queue
+    * else 
+    *   set departure
+    */
 
-         * if X.service time > time quantum
-         *      X.service time -=time quantum
-         *      X.contextSwitchOutTime = gblSystemTime + time quantum
-         *      X.type  = contextSwitchOut
-         *      add to event queue
-         * else 
-         *  // as before
-         */
-            X.departureTime = gblSystemTime + X.serviceTime;
-            X.waitingTime = (X.departureTime - X.arrivalTime) - X.serviceTime;
-            X.type = departure;
-            this->setEvent(X.departureTime,X);
+    if (X.serviceTime > TIME_QUANTUM) {
+        X.serviceTime -= TIME_QUANTUM;
+        X.contextSwitchOutTime = gblSystemTime + TIME_QUANTUM;
+        X.type = contextSwitchOutEvent;
+        this->setEvent(X.contextSwitchOutTime, X);
+    }
+    else {
+        X.departureTime = gblSystemTime + X.serviceTime;
+        X.waitingTime = (X.departureTime - X.arrivalTime) - X.serviceTime;
+        X.type = departure;
+        this->setEvent(X.departureTime,X);
+    } 
 }
 
 class Simulation {
@@ -609,6 +653,8 @@ void Simulation::initialize(){
     obj.type = arrival;
     obj.timeout = eventHandlerObj.gblSystemTime + eventHandlerObj.timeoutObj.getTimeout();
     obj.serviceTime = eventHandlerObj.serverObj.serviceTimeObj.getServiceTime();
+    obj.contextSwitchInTime = 0.0;
+    obj.contextSwitchOutTime = 0.0;
     obj.request_count=1;
     obj.objectId = ++eventHandlerObj.userCount;
     obj.response_count =0;
@@ -733,15 +779,17 @@ void read(UserData obj) {
 int main(){
     UserData obj = UserData();
     //read(obj);
-    obj.meanServiceTime = 1;
+    obj.meanServiceTime = 2;
     obj.meanTimeoutTime =10;
-    obj.serviceTimeDistribution = Exponential;
+    obj.serviceTimeDistribution = Uniform;
     obj.timeotTimeDistribution = Uniform;
-    obj.noOfUsers = 10;
-    obj.maxRequestPerUser =10;
-    obj.policy = FCFS;
+    obj.noOfUsers = 5;
+    obj.maxRequestPerUser = 8;
+    obj.policy = roundRobin;
     
     outdata.open("outfile.csv");
+    outTrace.open("Trace.txt");
+
     outdata << "EventId,Arrival Time,Departure Time,Waiting Time,RequestCount,ResponseCount" << endl;
 
     Simulation simObj = Simulation(obj);
