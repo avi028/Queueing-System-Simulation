@@ -4,13 +4,13 @@ using std::ifstream;
 
 using namespace std;
 
-#define MAX_USER_COUNT 100 // maximum number of users allowed 
+#define MAX_USER_COUNT 1000 // maximum number of users allowed 
 #define CORE_COUNT 4 // number of cores in system
-#define CONTEXT_SWITCH_TIME 0.1 // context switch time
+#define CONTEXT_SWITCH_TIME 0 // context switch time
 #define MAX_REQUEST_GENERATED 20 // 
-#define MAX_THREAD_COUNT 4  // Number of cores per thread
-#define MAX_BUFFER_SIZE 1000 // Server Buffer storage for incoming messages when no core is free
-#define TIME_QUANTUM 0.5 // Defined for Round Robin
+#define MAX_THREAD_COUNT 1  // Number of cores per thread
+#define MAX_BUFFER_SIZE 100 // Server Buffer storage for incoming messages when no core is free
+#define TIME_QUANTUM 1000 // Defined for Round Robin
 
 
 enum ServerStatus {IDLE = 1, FREE, BUSY}; // 2 states of server
@@ -19,6 +19,7 @@ enum SchedulingPolicy{FCFS=1, ROUNDROBIN}; //scheduling policies the system supp
 enum Distributions { EXPONENTIAL=1, UNIFORM, CONSTANT }; // types pof distribution system supports
 enum BufferStatus {FULL=1, AVAILABLE, EMPTY}; // buffer status representation
 
+ofstream reportData;
 ofstream outdata; // used to write final output data to file "outfile.csv"
 ofstream outTrace; // used to write trace of the system to file "Trace.txt"
 double meanWaitingTime = 0.0;
@@ -100,7 +101,7 @@ class Timeout {
 
     Distributions ds;
     double mean_time;
-    int minimum_timeout = 100;
+    int minimum_timeout = 200;
 
     /**
      * @brief Construct a new Timeout object
@@ -456,6 +457,7 @@ class Server{
  * @param obj 
  */
 Server::Server(UserData obj){
+    Core::coreIdIterator = 0;
     for(int i=0;i<CORE_COUNT;i++){
         coreObj[i]= Core(obj);
     }
@@ -606,6 +608,7 @@ class EventHandler {
         unsigned int maxRequestCount;
         priority_queue < timeEventTuple, vector<timeEventTuple>, comparatorTimeEventTuple > nextEventTime;
         Timeout timeoutObj;
+        int eventCount[MAX_USER_COUNT][2];
 
         EventHandler(){}
         EventHandler(UserData);
@@ -875,7 +878,9 @@ void EventHandler::depart(Event X){
     // if response is under the timeout of the request then generate new request
     if(X.departureTime < X.timeout){
         X.response_count++;
-        report(X);
+        // report(X);
+        this->eventCount[X.objectId-1][0] = X.request_count;
+        this->eventCount[X.objectId-1][1] = X.response_count;
         int requestCount = this->genNewEventId();
         if(requestCount <= maxRequestCount){
             X.eventId = requestCount;
@@ -1166,48 +1171,121 @@ void read(UserData *obj) {
  */
 int main(){
     UserData obj = UserData();
-    read(&obj);
-    // obj.meanServiceTime = 2;
-    // obj.meanTimeoutTime =10;
-    // obj.serviceTimeDistribution = EXPONENTIAL;
-    // obj.timeotTimeDistribution = UNIFORM;
-    // obj.noOfUsers = 5;
-    // obj.maxRequestPerUser = 8;
+    // read(&obj);
+    obj.meanServiceTime = 2;
+    obj.meanTimeoutTime = 10;
+    obj.serviceTimeDistribution = EXPONENTIAL;
+    obj.timeotTimeDistribution = EXPONENTIAL;
+    obj.noOfUsers = 0;
+    obj.maxRequestPerUser = 8;
     obj.policy = ROUNDROBIN;
     
     outdata.open("outfile.csv");
     outTrace.open("Trace.txt");
+    reportData.open("Report.csv");
 
-    outdata << "Even_Id,Arrival_Time,Departure_Time,Waiting_Time,Response_Time,Request_Count,Response_Count,Object_Id" << endl;
+    // outdata << "Even_Id,Arrival_Time,Departure_Time,Waiting_Time,Response_Time,Request_Count,Response_Count,Object_Id" << endl;
 
-    Simulation simObj = Simulation(obj);
-    simObj.initialize();
     
-    cout << "Parameters: " << endl << "1. No. of Cores: 4" << endl << "2. No. of Threads Per Core" << MAX_THREAD_COUNT << endl;
-    cout << "3. Buffer Size: " << MAX_BUFFER_SIZE << endl << "4. Context Switch Time: " << CONTEXT_SWITCH_TIME << endl << "5. Time Quanta: " << TIME_QUANTUM << endl;
-    cout << "6. Mean Serive Time: " << obj.meanServiceTime << endl << "7. Mean Timeout Time: " << obj.meanTimeoutTime << endl;
-    cout << "8. No. of Users: " << obj.noOfUsers << endl << "9. Number of Requests per User: " << obj.maxRequestPerUser << endl << "10. Scheduling Policy: Round Robin" << endl;  
+    
+    // cout << "Parameters: " << endl << "1. No. of Cores: 4" << endl << "2. No. of Threads Per Core" << MAX_THREAD_COUNT << endl;
+    // cout << "3. Buffer Size: " << MAX_BUFFER_SIZE << endl << "4. Context Switch Time: " << CONTEXT_SWITCH_TIME << endl << "5. Time Quanta: " << TIME_QUANTUM << endl;
+    // cout << "6. Mean Serive Time: " << obj.meanServiceTime << endl << "7. Mean Timeout Time: " << obj.meanTimeoutTime << endl;
+    // cout << "8. No. of Users: " << obj.noOfUsers << endl << "9. Number of Requests per User: " << obj.maxRequestPerUser << endl << "10. Scheduling Policy: Round Robin" << endl;  
 
-    outTrace << "Parameters: " << endl << "1. No. of Cores: 4" << endl << "2. No. of Threads Per Core" << MAX_THREAD_COUNT << endl;
-    outTrace << "3. Buffer Size: " << MAX_BUFFER_SIZE << endl << "4. Context Switch Time: " << CONTEXT_SWITCH_TIME << endl << "5. Time Quanta: " << TIME_QUANTUM << endl;
-    outTrace << "6. Mean Serive Time: " << obj.meanServiceTime << endl << "7. Mean Timeout Time: " << obj.meanTimeoutTime << endl;
-    outTrace << "8. No. of Users: " << obj.noOfUsers << endl << "9. Number of Requests per User: " << obj.maxRequestPerUser << endl << "10. Scheduling Policy: Round Robin" << endl;  
+    // outTrace << "Parameters: " << endl << "1. No. of Cores: 4" << endl << "2. No. of Threads Per Core" << MAX_THREAD_COUNT << endl;
+    // outTrace << "3. Buffer Size: " << MAX_BUFFER_SIZE << endl << "4. Context Switch Time: " << CONTEXT_SWITCH_TIME << endl << "5. Time Quanta: " << TIME_QUANTUM << endl;
+    // outTrace << "6. Mean Serive Time: " << obj.meanServiceTime << endl << "7. Mean Timeout Time: " << obj.meanTimeoutTime << endl;
+    // outTrace << "8. No. of Users: " << obj.noOfUsers << endl << "9. Number of Requests per User: " << obj.maxRequestPerUser << endl << "10. Scheduling Policy: Round Robin" << endl;  
 
 
-    cout << "Global System Time\t" << "Core Status\t" << "Server Buffer Top Element\t" << "Next Event Type\t" << "Next Event Time" << endl;
+    // cout << "Global System Time\t" << "Core Status\t" << "Server Buffer Top Element\t" << "Next Event Type\t" << "Next Event Time" << endl;
 
-    while(simObj.eventHandlerObj.IsNextEventTimeBufferEmpty()==false){
-        timeEventTuple x = simObj.eventHandlerObj.getNextEvent();
-        simObj.eventHandlerObj.printState(x);
-        simObj.time(x);
-        simObj.eventHandlerObj.manageEvent(x.eventObj);
+    
+
+    for (int l = 0; l < 30; l++) {
+        double finalMeanWaitingTime = 0.0;
+        double finalResponseTime = 0.0;
+        double finalBadput = 0.0;
+        double finalGoodput = 0.0;
+        double finalThroughput = 0.0;
+        double mean_request_drops = 0;
+        double per_core_util[CORE_COUNT] = {0.0, 0.0, 0.0, 0.0};
+        obj.noOfUsers += 10;
+
+        // double waitingArray[5];
+
+        for (int k = 0; k<5; k++) {
+            meanWaitingTime = 0.0;
+            meanResponseTime = 0.0;
+            request_drops = 0;
+            Simulation simObj = Simulation(obj);
+            simObj.initialize();
+            double prev_time = 0.0;
+            double core_util = 0.0;
+            double core_thread_util[CORE_COUNT] = {0.0, 0.0, 0.0, 0.0};
+
+            while(simObj.eventHandlerObj.IsNextEventTimeBufferEmpty()==false){
+                timeEventTuple x = simObj.eventHandlerObj.getNextEvent();
+                // simObj.eventHandlerObj.printState(x);
+                simObj.time(x);
+                simObj.eventHandlerObj.manageEvent(x.eventObj);
+                double diff = x.eventTime - prev_time;
+                prev_time = x.eventTime;
+                for (int i = 0; i<CORE_COUNT; i++) {
+                    // if (simObj.eventHandlerObj.serverObj.coreObj[i].getCoreStatus() != IDLE) {
+                        core_thread_util[i] += diff * (simObj.eventHandlerObj.serverObj.coreObj[i].getBUsyThreadCount()/MAX_THREAD_COUNT);
+                    // }
+                }
+            }
+
+            int total_request_count = 0, total_response_count = 0;
+
+            for (int i = 0; i < obj.noOfUsers; i++) {
+                total_request_count += simObj.eventHandlerObj.eventCount[i][0];
+                total_response_count += simObj.eventHandlerObj.eventCount[i][1];
+            } 
+
+            int retries = total_request_count - total_response_count;
+            int not_timedout = total_response_count - retries;
+
+            double badput = (retries*1.0)/simObj.eventHandlerObj.gblSystemTime;
+            double goodput = (not_timedout*1.0)/simObj.eventHandlerObj.gblSystemTime; 
+            double throughput = (total_response_count * 1.0)/simObj.eventHandlerObj.gblSystemTime;
+
+            // // waitingArray[k] = meanResponseTime/simObj.eventHandlerObj.maxRequestCount;
+            // // finalMeanWaitingTime += meanWaitingTime/simObj.eventHandlerObj.eventIdSeed;
+            // // finalResponseTime += meanResponseTime/simObj.eventHandlerObj.maxRequestCount;
+
+            finalBadput += badput; finalGoodput += goodput; finalThroughput += throughput;
+
+            mean_request_drops += request_drops;
+
+            for (int i = 0; i<CORE_COUNT; i++) {
+                per_core_util[i] += core_thread_util[i]/simObj.eventHandlerObj.gblSystemTime;
+            }
+
+        }
+        
+        reportData << obj.noOfUsers << ",";
+
+        // for (int p = 0; p < 5; p++) {
+        //     reportData << waitingArray[p] << ",";
+        // }
+        reportData << mean_request_drops/5 << "," << finalBadput/5 << "," << finalGoodput/5 << "," << finalThroughput/5 << ",";
+        for (int i = 0; i<CORE_COUNT; i++) {
+            reportData << per_core_util[i]/5 << ",";
+        }
+        reportData << endl;
     }
+         
 
-    outTrace << "Mean Waiting Time = " << meanWaitingTime/simObj.eventHandlerObj.eventIdSeed << endl;
-    outTrace << "Mean Response Time = " << meanResponseTime/simObj.eventHandlerObj.eventIdSeed << endl;
-    outTrace << "Total Request Drops = " << request_drops << endl;
-    cout << "Total Request Drops = " << request_drops << endl;
-    cout << "Mean Waiting Time = " << meanWaitingTime/simObj.eventHandlerObj.eventIdSeed << endl;
-    cout << "Mean Response Time = " << meanResponseTime/simObj.eventHandlerObj.eventIdSeed << endl;
+
+    // outTrace << "Mean Waiting Time = " << meanWaitingTime/simObj.eventHandlerObj.eventIdSeed << endl;
+    // outTrace << "Mean Response Time = " << meanResponseTime/simObj.eventHandlerObj.eventIdSeed << endl;
+    // outTrace << "Total Request Drops = " << request_drops << endl;
+    // cout << "Total Request Drops = " << request_drops << endl;
+    // cout << "Mean Waiting Time = " << meanWaitingTime/simObj.eventHandlerObj.eventIdSeed << endl;
+    // cout << "Mean Response Time = " << meanResponseTime/simObj.eventHandlerObj.eventIdSeed << endl;
     return 0;
 }
