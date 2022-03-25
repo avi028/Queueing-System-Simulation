@@ -6,11 +6,11 @@ using namespace std;
 
 #define MAX_USER_COUNT 1000 // maximum number of users allowed 
 #define CORE_COUNT 4 // number of cores in system
-#define CONTEXT_SWITCH_TIME 0 // context switch time
+#define CONTEXT_SWITCH_TIME 0.1 // context switch time
 #define MAX_REQUEST_GENERATED 20 // 
-#define MAX_THREAD_COUNT 1  // Number of cores per thread
-#define MAX_BUFFER_SIZE 100 // Server Buffer storage for incoming messages when no core is free
-#define TIME_QUANTUM 1000 // Defined for Round Robin
+#define MAX_THREAD_COUNT 4  // Number of cores per thread
+#define MAX_BUFFER_SIZE 200 // Server Buffer storage for incoming messages when no core is free
+#define TIME_QUANTUM 0.5 // Defined for Round Robin
 
 
 enum ServerStatus {IDLE = 1, FREE, BUSY}; // 2 states of server
@@ -101,7 +101,7 @@ class Timeout {
 
     Distributions ds;
     double mean_time;
-    int minimum_timeout = 200;
+    int minimum_timeout = 50;
 
     /**
      * @brief Construct a new Timeout object
@@ -605,6 +605,7 @@ class EventHandler {
         double gblSystemTime;
         int eventIdSeed ;
         int userCount;
+        double total_ctx_swtch_times[4];
         unsigned int maxRequestCount;
         priority_queue < timeEventTuple, vector<timeEventTuple>, comparatorTimeEventTuple > nextEventTime;
         Timeout timeoutObj;
@@ -725,6 +726,9 @@ EventHandler::EventHandler(UserData obj){
     eventIdSeed = 1;
     userCount=0;
     gblSystemTime=0;
+    for (int i = 0; i<4; i++) {
+        total_ctx_swtch_times[i] = 0.0;
+    }
     maxRequestCount = obj.noOfUsers * obj.maxRequestPerUser;
 }
 
@@ -935,6 +939,8 @@ void EventHandler::contextSwitchOut(Event X){
  * @param X 
  */
 void EventHandler::contextSwitchIn(Event X){
+
+    this->total_ctx_swtch_times[X.core]+= CONTEXT_SWITCH_TIME;
 
     // if the cervice time left is more than time quantum then assign next context switch out time
     if (X.serviceTime > TIME_QUANTUM) {
@@ -1184,26 +1190,27 @@ int main(){
     outTrace.open("Trace.txt");
     reportData.open("Report.csv");
 
-    // outdata << "Even_Id,Arrival_Time,Departure_Time,Waiting_Time,Response_Time,Request_Count,Response_Count,Object_Id" << endl;
+    outdata << "Even_Id,Arrival_Time,Departure_Time,Waiting_Time,Response_Time,Request_Count,Response_Count,Object_Id" << endl;
 
     
     
-    // cout << "Parameters: " << endl << "1. No. of Cores: 4" << endl << "2. No. of Threads Per Core" << MAX_THREAD_COUNT << endl;
-    // cout << "3. Buffer Size: " << MAX_BUFFER_SIZE << endl << "4. Context Switch Time: " << CONTEXT_SWITCH_TIME << endl << "5. Time Quanta: " << TIME_QUANTUM << endl;
-    // cout << "6. Mean Serive Time: " << obj.meanServiceTime << endl << "7. Mean Timeout Time: " << obj.meanTimeoutTime << endl;
-    // cout << "8. No. of Users: " << obj.noOfUsers << endl << "9. Number of Requests per User: " << obj.maxRequestPerUser << endl << "10. Scheduling Policy: Round Robin" << endl;  
+    cout << "Parameters: " << endl << "1. No. of Cores: 4" << endl << "2. No. of Threads Per Core" << MAX_THREAD_COUNT << endl;
+    cout << "3. Buffer Size: " << MAX_BUFFER_SIZE << endl << "4. Context Switch Time: " << CONTEXT_SWITCH_TIME << endl << "5. Time Quanta: " << TIME_QUANTUM << endl;
+    cout << "6. Mean Serive Time: " << obj.meanServiceTime << endl << "7. Mean Timeout Time: " << obj.meanTimeoutTime << endl;
+    cout << "8. No. of Users: " << obj.noOfUsers << endl << "9. Number of Requests per User: " << obj.maxRequestPerUser << endl << "10. Scheduling Policy: Round Robin" << endl;  
 
-    // outTrace << "Parameters: " << endl << "1. No. of Cores: 4" << endl << "2. No. of Threads Per Core" << MAX_THREAD_COUNT << endl;
-    // outTrace << "3. Buffer Size: " << MAX_BUFFER_SIZE << endl << "4. Context Switch Time: " << CONTEXT_SWITCH_TIME << endl << "5. Time Quanta: " << TIME_QUANTUM << endl;
-    // outTrace << "6. Mean Serive Time: " << obj.meanServiceTime << endl << "7. Mean Timeout Time: " << obj.meanTimeoutTime << endl;
-    // outTrace << "8. No. of Users: " << obj.noOfUsers << endl << "9. Number of Requests per User: " << obj.maxRequestPerUser << endl << "10. Scheduling Policy: Round Robin" << endl;  
+    outTrace << "Parameters: " << endl << "1. No. of Cores: 4" << endl << "2. No. of Threads Per Core" << MAX_THREAD_COUNT << endl;
+    outTrace << "3. Buffer Size: " << MAX_BUFFER_SIZE << endl << "4. Context Switch Time: " << CONTEXT_SWITCH_TIME << endl << "5. Time Quanta: " << TIME_QUANTUM << endl;
+    outTrace << "6. Mean Serive Time: " << obj.meanServiceTime << endl << "7. Mean Timeout Time: " << obj.meanTimeoutTime << endl;
+    outTrace << "8. No. of Users: " << obj.noOfUsers << endl << "9. Number of Requests per User: " << obj.maxRequestPerUser << endl << "10. Scheduling Policy: Round Robin" << endl;  
 
 
-    // cout << "Global System Time\t" << "Core Status\t" << "Server Buffer Top Element\t" << "Next Event Type\t" << "Next Event Time" << endl;
+    cout << "Global System Time\t" << "Core Status\t" << "Server Buffer Top Element\t" << "Next Event Type\t" << "Next Event Time" << endl;
 
-    
+    int variable_users = 30;
+    int runs = 5;
 
-    for (int l = 0; l < 30; l++) {
+    for (int l = 0; l < variable_users; l++) {
         double finalMeanWaitingTime = 0.0;
         double finalResponseTime = 0.0;
         double finalBadput = 0.0;
@@ -1215,7 +1222,7 @@ int main(){
 
         // double waitingArray[5];
 
-        for (int k = 0; k<5; k++) {
+        for (int k = 0; k<runs; k++) {
             meanWaitingTime = 0.0;
             meanResponseTime = 0.0;
             request_drops = 0;
@@ -1233,9 +1240,8 @@ int main(){
                 double diff = x.eventTime - prev_time;
                 prev_time = x.eventTime;
                 for (int i = 0; i<CORE_COUNT; i++) {
-                    // if (simObj.eventHandlerObj.serverObj.coreObj[i].getCoreStatus() != IDLE) {
-                        core_thread_util[i] += diff * (simObj.eventHandlerObj.serverObj.coreObj[i].getBUsyThreadCount()/MAX_THREAD_COUNT);
-                    // }
+                    if (simObj.eventHandlerObj.serverObj.coreObj[i].getCoreStatus() != IDLE) 
+                        core_thread_util[i] += diff; //* (simObj.eventHandlerObj.serverObj.coreObj[i].getBUsyThreadCount()/MAX_THREAD_COUNT);
                 }
             }
 
@@ -1253,16 +1259,16 @@ int main(){
             double goodput = (not_timedout*1.0)/simObj.eventHandlerObj.gblSystemTime; 
             double throughput = (total_response_count * 1.0)/simObj.eventHandlerObj.gblSystemTime;
 
-            // // waitingArray[k] = meanResponseTime/simObj.eventHandlerObj.maxRequestCount;
-            // // finalMeanWaitingTime += meanWaitingTime/simObj.eventHandlerObj.eventIdSeed;
-            // // finalResponseTime += meanResponseTime/simObj.eventHandlerObj.maxRequestCount;
+            // waitingArray[k] = meanResponseTime/simObj.eventHandlerObj.maxRequestCount;
+            // finalMeanWaitingTime += meanWaitingTime/simObj.eventHandlerObj.eventIdSeed;
+            // finalResponseTime += meanResponseTime/simObj.eventHandlerObj.maxRequestCount;
 
             finalBadput += badput; finalGoodput += goodput; finalThroughput += throughput;
 
             mean_request_drops += request_drops;
 
             for (int i = 0; i<CORE_COUNT; i++) {
-                per_core_util[i] += core_thread_util[i]/simObj.eventHandlerObj.gblSystemTime;
+                per_core_util[i] += (core_thread_util[i] - simObj.eventHandlerObj.total_ctx_swtch_times[i])/simObj.eventHandlerObj.gblSystemTime;
             }
 
         }
