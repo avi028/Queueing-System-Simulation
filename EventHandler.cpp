@@ -6,11 +6,11 @@ using namespace std;
 
 #define MAX_USER_COUNT 1000 // maximum number of users allowed 
 #define CORE_COUNT 4 // number of cores in system
-#define CONTEXT_SWITCH_TIME 0.1 // context switch time
+#define CONTEXT_SWITCH_TIME 0 // context switch time
 #define MAX_REQUEST_GENERATED 20 // 
-#define MAX_THREAD_COUNT 4  // Number of cores per thread
-#define MAX_BUFFER_SIZE 200 // Server Buffer storage for incoming messages when no core is free
-#define TIME_QUANTUM 0.5 // Defined for Round Robin
+#define MAX_THREAD_COUNT 1  // Number of cores per thread
+#define MAX_BUFFER_SIZE 500 // Server Buffer storage for incoming messages when no core is free
+#define TIME_QUANTUM 1000 // Defined for Round Robin
 
 
 enum ServerStatus {IDLE = 1, FREE, BUSY}; // 2 states of server
@@ -55,7 +55,7 @@ class Service_Time {
      * @param user_mean_service 
      * @param user_ds 
      */
-    Service_Time(int user_mean_service, Distributions user_ds){
+    Service_Time(double user_mean_service, Distributions user_ds){
       this->mean_service  = user_mean_service;
       this->ds = user_ds;  
     }
@@ -118,7 +118,7 @@ class Timeout {
      * @param user_mean_time 
      * @param user_ds 
      */
-    Timeout(int user_mean_time, Distributions user_ds){
+    Timeout(double user_mean_time, Distributions user_ds){
       this->mean_time  = user_mean_time;
       this->ds = user_ds;  
     }
@@ -820,7 +820,7 @@ void EventHandler::arrive(Event X){
             obj.eventId = requestCount;
             obj.type = ARRIVAL;
             obj.serviceTime = this->serverObj.serviceTimeObj.getServiceTime();
-            obj.eventServiceTime = this->serverObj.serviceTimeObj.getServiceTime();
+            obj.eventServiceTime = obj.serviceTime;
             obj.timeout = gblSystemTime + this->timeoutObj.getTimeout();
             obj.request_count  =1;
             obj.response_count =0;
@@ -892,7 +892,7 @@ void EventHandler::depart(Event X){
             X.timeout = gblSystemTime + this->timeoutObj.getTimeout();
             X.arrivalTime = gblSystemTime+X.getRandomThinkTime();
             X.serviceTime = this->serverObj.serviceTimeObj.getServiceTime();
-            X.eventServiceTime = this->serverObj.serviceTimeObj.getServiceTime();
+            X.eventServiceTime = X.serviceTime;
             X.departureTime = 0;
             X.waitingTime =0 ;
             X.core = 0;
@@ -922,6 +922,8 @@ void EventHandler::depart(Event X){
  */
 void EventHandler::contextSwitchOut(Event X){
 
+    this->total_ctx_swtch_times[X.core]+= CONTEXT_SWITCH_TIME;
+
     // remove the core from the process thread of the core
     this->serverObj.coreObj[X.core].removeFromThread();
     double nextAvailableTime = 0.0;
@@ -940,8 +942,6 @@ void EventHandler::contextSwitchOut(Event X){
  */
 void EventHandler::contextSwitchIn(Event X){
 
-    this->total_ctx_swtch_times[X.core]+= CONTEXT_SWITCH_TIME;
-
     // if the cervice time left is more than time quantum then assign next context switch out time
     if (X.serviceTime > TIME_QUANTUM) {
         X.serviceTime -= TIME_QUANTUM;
@@ -951,7 +951,7 @@ void EventHandler::contextSwitchIn(Event X){
     }
     // of the remaining service time is less than the time quantum assign the DEPARTURE time 
     else {
-        X.departureTime = gblSystemTime + X.eventServiceTime;
+        X.departureTime = gblSystemTime + X.serviceTime;
         X.waitingTime = (X.departureTime - X.arrivalTime) - X.eventServiceTime;
         meanWaitingTime += X.waitingTime;
         meanResponseTime += X.departureTime - X.arrivalTime; 
@@ -1004,7 +1004,7 @@ void Simulation::initialize(){
     obj.type = ARRIVAL;
     obj.timeout = eventHandlerObj.gblSystemTime + eventHandlerObj.timeoutObj.getTimeout();
     obj.serviceTime = eventHandlerObj.serverObj.serviceTimeObj.getServiceTime();
-    obj.eventServiceTime = eventHandlerObj.serverObj.serviceTimeObj.getServiceTime();
+    obj.eventServiceTime = obj.serviceTime;
     obj.contextSwitchInTime = 0.0;
     obj.contextSwitchOutTime = 0.0;
     obj.request_count=1;
@@ -1178,12 +1178,12 @@ void read(UserData *obj) {
 int main(){
     UserData obj = UserData();
     // read(&obj);
-    obj.meanServiceTime = 2;
-    obj.meanTimeoutTime = 10;
+    obj.meanServiceTime = 0.23;
+    obj.meanTimeoutTime = 5;
     obj.serviceTimeDistribution = EXPONENTIAL;
     obj.timeotTimeDistribution = EXPONENTIAL;
     obj.noOfUsers = 0;
-    obj.maxRequestPerUser = 8;
+    obj.maxRequestPerUser = 100;
     obj.policy = ROUNDROBIN;
     
     outdata.open("outfile.csv");
@@ -1210,6 +1210,8 @@ int main(){
     int variable_users = 30;
     int runs = 5;
 
+    reportData << "noOfUsers,minRes,maxRes,meanRes,core1,core2,core3,core4,requestDrop,badput,goodput,throughput\n";
+
     for (int l = 0; l < variable_users; l++) {
         double finalMeanWaitingTime = 0.0;
         double finalResponseTime = 0.0;
@@ -1220,7 +1222,7 @@ int main(){
         double per_core_util[CORE_COUNT] = {0.0, 0.0, 0.0, 0.0};
         obj.noOfUsers += 10;
 
-        // double waitingArray[5];
+        double waitingArray[5];
 
         for (int k = 0; k<runs; k++) {
             meanWaitingTime = 0.0;
@@ -1257,11 +1259,11 @@ int main(){
 
             double badput = (retries*1.0)/simObj.eventHandlerObj.gblSystemTime;
             double goodput = (not_timedout*1.0)/simObj.eventHandlerObj.gblSystemTime; 
-            double throughput = (total_response_count * 1.0)/simObj.eventHandlerObj.gblSystemTime;
+            double throughput = (total_request_count * 1.0)/simObj.eventHandlerObj.gblSystemTime;
 
-            // waitingArray[k] = meanResponseTime/simObj.eventHandlerObj.maxRequestCount;
+            waitingArray[k] = meanResponseTime/simObj.eventHandlerObj.maxRequestCount;
             // finalMeanWaitingTime += meanWaitingTime/simObj.eventHandlerObj.eventIdSeed;
-            // finalResponseTime += meanResponseTime/simObj.eventHandlerObj.maxRequestCount;
+            finalResponseTime += meanResponseTime/simObj.eventHandlerObj.maxRequestCount;
 
             finalBadput += badput; finalGoodput += goodput; finalThroughput += throughput;
 
@@ -1274,15 +1276,19 @@ int main(){
         }
         
         reportData << obj.noOfUsers << ",";
+        double minRes = 10000, maxRes = 0.0;
 
-        // for (int p = 0; p < 5; p++) {
-        //     reportData << waitingArray[p] << ",";
-        // }
-        reportData << mean_request_drops/5 << "," << finalBadput/5 << "," << finalGoodput/5 << "," << finalThroughput/5 << ",";
+        for (int p = 0; p < 5; p++) {
+            minRes = minRes > waitingArray[p] ? waitingArray[p] : minRes;
+            maxRes = maxRes < waitingArray[p] ? waitingArray[p] : maxRes;
+        }
+        reportData << minRes << "," << maxRes << ",";
+        reportData << finalResponseTime/5 << ",";
         for (int i = 0; i<CORE_COUNT; i++) {
             reportData << per_core_util[i]/5 << ",";
         }
-        reportData << endl;
+        reportData << mean_request_drops/5 << "," << finalBadput/5 << "," << finalGoodput/5 << "," << finalThroughput/5 << endl;
+        
     }
          
 
