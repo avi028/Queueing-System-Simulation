@@ -4,21 +4,22 @@ using std::ifstream;
 
 using namespace std;
 
-#define MAX_USER_COUNT 100 // maximum number of users allowed 
+#define MAX_USER_COUNT 1000 // maximum number of users allowed 
 #define CORE_COUNT 4 // number of cores in system
-#define CONTEXT_SWITCH_TIME 0.1 // context switch time
+#define CONTEXT_SWITCH_TIME 0 // context switch time
 #define MAX_REQUEST_GENERATED 20 // 
-#define MAX_THREAD_COUNT 4  // Number of cores per thread
-#define MAX_BUFFER_SIZE 1000 // Server Buffer storage for incoming messages when no core is free
-#define TIME_QUANTUM 0.5 // Defined for Round Robin
+#define MAX_THREAD_COUNT 1  // Number of cores per thread
+#define MAX_BUFFER_SIZE 500 // Server Buffer storage for incoming messages when no core is free
+#define TIME_QUANTUM 500 // Defined for Round Robin
 
 
-enum serverStatus {Idle = 1,Free=2, Busy=2}; // 2 states of server
-enum eventType {arrival=1,departure=2,contextSwitchInEvent=3,contextSwitchOutEvent=4}; //types of event dealt with in the simulation
-enum schedulingPolicy{FCFS=1,roundRobin=2}; //scheduling policies the system supports
-enum Distributions { Exponential=1, Uniform, Constant }; // types pof distribution system supports
-enum bufferStatus {Full=1,Available=2,Empty=3}; // buffer status representation
+enum ServerStatus {IDLE = 1, FREE, BUSY}; // 2 states of server
+enum EventType {ARRIVAL=1, DEPARTURE, CONTEXTSWITCHIN, CONTEXTSWITCHOUT}; //types of event dealt with in the simulation
+enum SchedulingPolicy{FCFS=1, ROUNDROBIN}; //scheduling policies the system supports
+enum Distributions { EXPONENTIAL=1, UNIFORM, CONSTANT }; // types pof distribution system supports
+enum BufferStatus {FULL=1, AVAILABLE, EMPTY}; // buffer status representation
 
+ofstream reportData;
 ofstream outdata; // used to write final output data to file "outfile.csv"
 ofstream outTrace; // used to write trace of the system to file "Trace.txt"
 double meanWaitingTime = 0.0;
@@ -45,7 +46,7 @@ class Service_Time {
      * 
      */
     Service_Time(){
-        ds = Uniform;
+        ds = UNIFORM;
         mean_service = 5;
     }
     /**
@@ -54,7 +55,7 @@ class Service_Time {
      * @param user_mean_service 
      * @param user_ds 
      */
-    Service_Time(int user_mean_service, Distributions user_ds){
+    Service_Time(double user_mean_service, Distributions user_ds){
       this->mean_service  = user_mean_service;
       this->ds = user_ds;  
     }
@@ -72,15 +73,15 @@ class Service_Time {
         std::uniform_real_distribution<float> dist1(0, 1);
 
         switch(ds) {
-            case Exponential:
+            case EXPONENTIAL:
                 final_service_time = -mean_service * log(dist1(generator));
                 break;
             
-            case Uniform:
+            case UNIFORM:
                 final_service_time = dist(generator);
                 break;
 
-            case Constant:
+            case CONSTANT:
                 final_service_time = mean_service;
                 break;
         }
@@ -100,14 +101,14 @@ class Timeout {
 
     Distributions ds;
     double mean_time;
-    int minimum_timeout = 100;
+    int minimum_timeout = 50;
 
     /**
      * @brief Construct a new Timeout object
      * 
      */
     Timeout(){
-        ds = Uniform;
+        ds = UNIFORM;
         mean_time = 3;
     }
 
@@ -117,7 +118,7 @@ class Timeout {
      * @param user_mean_time 
      * @param user_ds 
      */
-    Timeout(int user_mean_time, Distributions user_ds){
+    Timeout(double user_mean_time, Distributions user_ds){
       this->mean_time  = user_mean_time;
       this->ds = user_ds;  
     }
@@ -135,15 +136,15 @@ class Timeout {
         std::uniform_real_distribution<float> dist1(0, 1);
 
         switch(ds) {
-            case Exponential:
+            case EXPONENTIAL:
                 final_timeout = (-mean_time * log(dist1(generator))) + minimum_timeout;
                 break;
             
-            case Uniform:
+            case UNIFORM:
                 final_timeout = dist(generator)+minimum_timeout;
                 break;
 
-            case Constant:
+            case CONSTANT:
                 final_timeout = mean_time + minimum_timeout;
                 break;
         }
@@ -161,7 +162,7 @@ class Timeout {
  *              :   naxRequestPerUser(unsigned int)
  *              :   serviceTimeDistribution       (Distributions) 
  *              :   timeoutTimeDistribution       (Distributions) 
- *              :   schedulingPolicy         (policy)
+ *              :   SchedulingPolicy         (policy)
  */ 
 class UserData{
     public:
@@ -171,13 +172,13 @@ class UserData{
         unsigned int maxRequestPerUser;
         Distributions serviceTimeDistribution;
         Distributions timeotTimeDistribution;
-        schedulingPolicy policy;
+        SchedulingPolicy policy;
 };
 /**
  * @brief the request instance unique to each user 
  * Attributes       :         (int) objectId
  *                  :         (int) eventId
- *                  :         (eventType) type
+ *                  :         (EventType) type
  *                  :         (double) arrivalTime
  *                  :         (double) timeout
  *                  :         (double) contextSwitchInTime
@@ -198,7 +199,7 @@ class Event {
     public:
        int objectId;
        int eventId;
-       eventType type;
+       EventType type;
        double arrivalTime;
        double timeout;
        double contextSwitchInTime;
@@ -233,6 +234,7 @@ double Event::getRandomThinkTime(){
     std::uniform_int_distribution<int> dist(4,10);
     auto thinkTime = dist(generator);
     return (double)thinkTime;
+    // return 6.00;
 }
 
 double Event::getRemainingServiceTime(){
@@ -242,18 +244,18 @@ double Event::getRemainingServiceTime(){
 /**
  * @brief Used to schedule the requests on the core
  * 
- * Attributes   :   type (schedulingPolicy)
+ * Attributes   :   type (SchedulingPolicy)
  *              :   contextSwitchTime (int)
  */
 class Scheduler{
     public:
         
-        schedulingPolicy type;
+        SchedulingPolicy type;
         int contextSwitchTIme;
 
         Scheduler(){}
-        Scheduler(schedulingPolicy p);
-        void setPolicy(schedulingPolicy p);
+        Scheduler(SchedulingPolicy p);
+        void setPolicy(SchedulingPolicy p);
 };
 
 /**
@@ -261,7 +263,7 @@ class Scheduler{
  * 
  * @param p 
  */
-Scheduler::Scheduler(schedulingPolicy p){
+Scheduler::Scheduler(SchedulingPolicy p){
     type=p;
     contextSwitchTIme = CONTEXT_SWITCH_TIME;
 }
@@ -271,14 +273,14 @@ Scheduler::Scheduler(schedulingPolicy p){
  * 
  * @param p 
  */
-void Scheduler::setPolicy(schedulingPolicy p){
+void Scheduler::setPolicy(SchedulingPolicy p){
     this->type = p;
 }
 
 /**
  * @brief Each represents a core of the system
  * Attributes : threads (queue of Event Class instance Pointers)
- *            : status (serverStatus)  
+ *            : status (ServerStatus)  
  *            : threadBusyCount (int)
  *            : schedulerObj (Scheduler Class Instance)
  *            : coreId (int identification of the core)
@@ -286,8 +288,8 @@ void Scheduler::setPolicy(schedulingPolicy p){
  * 
  * 
  * Methods      :  double getNextCoreAvailableTime()
- *              :  serverStatus getCoreStatus()
- *              :  void setCoreStatus(serverStatus status)
+ *              :  ServerStatus getCoreStatus()
+ *              :  void setCoreStatus(ServerStatus status)
  *              :  int addToThread(Event obj)
  *              :  Event* removeFromThread()
  *              :  int getBUsyThreadCount()
@@ -297,7 +299,7 @@ class Core{
     public:
     
         std::queue<Event*> threads;
-        serverStatus status;
+        ServerStatus status;
         int threadBusyCount;
         Scheduler schedulerObj;
         int coreId;
@@ -306,8 +308,8 @@ class Core{
         Core(){}
         Core(UserData);
         double getNextCoreAvailableTime();
-        serverStatus getCoreStatus();
-        void setCoreStatus(serverStatus status);
+        ServerStatus getCoreStatus();
+        void setCoreStatus(ServerStatus status);
         int addToThread(Event obj);
         Event* removeFromThread();
         int getBUsyThreadCount();
@@ -320,7 +322,7 @@ class Core{
  * @param obj 
  */
 Core::Core(UserData obj){
-    status = Idle;
+    status = IDLE;
     threadBusyCount=0;
     coreId=coreIdIterator++;
     schedulerObj = Scheduler(obj.policy);
@@ -350,14 +352,14 @@ double Core::getNextCoreAvailableTime(){
 /**
  * @brief 
  * 
- * @return serverStatus 
+ * @return ServerStatus 
  */
-serverStatus Core::getCoreStatus(){
+ServerStatus Core::getCoreStatus(){
     if(this->threadBusyCount==MAX_THREAD_COUNT)
-        return Busy;
+        return BUSY;
     if(this->threadBusyCount > 0 )
-        return Free;
-    return Idle;
+        return FREE;
+    return IDLE;
 }
 
 /**
@@ -365,7 +367,7 @@ serverStatus Core::getCoreStatus(){
  * 
  * @param status 
  */
-void Core::setCoreStatus(serverStatus status){
+void Core::setCoreStatus(ServerStatus status){
     this->status = status;
 }
 
@@ -379,9 +381,9 @@ int Core::addToThread(Event obj){
     threads.push(&obj);
     threadBusyCount = threadBusyCount + 1;
     if(threadBusyCount >= MAX_THREAD_COUNT)
-        this->status = Busy;     
+        this->status = BUSY;     
     else if(threadBusyCount >0)
-        this->status =Free;
+        this->status =FREE;
     return 1;
 }
 
@@ -395,9 +397,9 @@ Event* Core::removeFromThread(){
     threads.pop();
     this->threadBusyCount = this->threadBusyCount -1;
     if(this->threadBusyCount == 0)
-        this->status = Idle;
+        this->status = IDLE;
     else if(this->threadBusyCount < MAX_THREAD_COUNT)
-        this->status = Free;             
+        this->status = FREE;             
     return obj;
 }
 
@@ -428,10 +430,10 @@ void Core::setBusyThreadCount(int count){
  * 
  * Methods      :       Event getNextEvent()
  *              :       void addEventToBuffer(Event)
- *              :       serverStatus getServerStatus()
+ *              :       ServerStatus getServerStatus()
  *              :       Core getCore(int coreCount)
  *              :       int getFreeCore()
- *              :       bufferStatus getBufferStatus()
+ *              :       BufferStatus getBufferStatus()
  */
 class Server{
     public:
@@ -443,10 +445,10 @@ class Server{
         Server(UserData);
         Event getNextEvent();
         void addEventToBuffer(Event);
-        serverStatus getServerStatus();
+        ServerStatus getServerStatus();
         Core getCore(int coreCount);
         int getFreeCore(); 
-        bufferStatus getBufferStatus();
+        BufferStatus getBufferStatus();
 
 };
 
@@ -456,6 +458,7 @@ class Server{
  * @param obj 
  */
 Server::Server(UserData obj){
+    Core::coreIdIterator = 0;
     for(int i=0;i<CORE_COUNT;i++){
         coreObj[i]= Core(obj);
     }
@@ -466,14 +469,14 @@ Server::Server(UserData obj){
 /**
  * @brief get status of the server buffer queue
  * 
- * @return bufferStatus 
+ * @return BufferStatus 
  */
-bufferStatus Server::getBufferStatus(){
+BufferStatus Server::getBufferStatus(){
     if(this->buffer.empty())
-        return Empty;
+        return EMPTY;
     if(this->buffer.size()==MAX_BUFFER_SIZE)
-        return Full;
-    return Available;
+        return FULL;
+    return AVAILABLE;
 }
 // coreId 0,1,2,3
 
@@ -517,28 +520,28 @@ Event Server::getNextEvent(){
 /**
  * @brief return server status
  * 
- * @return serverStatus 
+ * @return ServerStatus 
  */
-serverStatus Server::getServerStatus(){
+ServerStatus Server::getServerStatus(){
     int busyCount=0;
     for (int i=0;i<CORE_COUNT;i++){
-        if(this->coreObj[i].getCoreStatus()==Busy && this->coreObj[i].threadBusyCount==MAX_THREAD_COUNT){
+        if(this->coreObj[i].getCoreStatus()==BUSY && this->coreObj[i].threadBusyCount==MAX_THREAD_COUNT){
             busyCount++;
         }
     }
     if(busyCount==CORE_COUNT)
-        return Busy;
+        return BUSY;
 
     busyCount=0;
     for (int i=0;i<CORE_COUNT;i++){
-        if(this->coreObj[i].getCoreStatus()==Free){
+        if(this->coreObj[i].getCoreStatus()==FREE){
             busyCount++;
         }
     }
     if(busyCount > 0)
-        return Free;
+        return FREE;
         
-    return Idle;
+    return IDLE;
 }
 
 /**
@@ -603,9 +606,11 @@ class EventHandler {
         double gblSystemTime;
         int eventIdSeed ;
         int userCount;
+        double total_ctx_swtch_times[4];
         unsigned int maxRequestCount;
         priority_queue < timeEventTuple, vector<timeEventTuple>, comparatorTimeEventTuple > nextEventTime;
         Timeout timeoutObj;
+        int eventCount[MAX_USER_COUNT][2];
 
         EventHandler(){}
         EventHandler(UserData);
@@ -646,15 +651,27 @@ void EventHandler::printState(timeEventTuple te) {
     cout << "[";
     outTrace << "[";
     for (int i = 0; i < 4; i++) {
-        cout << this->serverObj.coreObj[i].getCoreStatus();
-        outTrace << this->serverObj.coreObj[i].getCoreStatus();
+        switch(this->serverObj.coreObj[i].getCoreStatus()) {
+        case IDLE:
+            cout << "I ";
+            outTrace << "I ";
+            break;
+        case BUSY:
+            cout << "B ";
+            outTrace << "B ";
+            break;
+        case AVAILABLE:
+            cout << "A ";
+            outTrace << "A ";
+            break; 
+        }
     }
     cout << "]\t"; outTrace << "]\t";
 
 
 	if (this->serverObj.buffer.empty()) {
-		cout << "Empty\t\t";
-        outTrace << "Empty\t\t";
+		cout << "EMPTY\t\t";
+        outTrace << "EMPTY\t\t";
 	}
 	else {
         cout << serverObj.buffer.front().arrivalTime << "\t\t";
@@ -662,19 +679,19 @@ void EventHandler::printState(timeEventTuple te) {
     }
 	 	
     switch(te.eventObj.type) {
-        case arrival:
+        case ARRIVAL:
             cout << "Arrival      \t\t";
             outTrace << "Arrival      \t\t";
             break;
-        case departure:
+        case DEPARTURE:
             cout << "Departure    \t\t";
             outTrace << "Departure    \t\t";
             break;
-        case contextSwitchInEvent:
+        case CONTEXTSWITCHIN:
             cout << "Cntx Swtch In\t\t";
             outTrace << "Cntx Swtch In\t\t";
             break;
-        case contextSwitchOutEvent:
+        case CONTEXTSWITCHOUT:
             cout << "Cntx Swtch Out\t\t";
             outTrace << "Cntx Swtch Out\t\t";
             break; 
@@ -710,6 +727,9 @@ EventHandler::EventHandler(UserData obj){
     eventIdSeed = 1;
     userCount=0;
     gblSystemTime=0;
+    for (int i = 0; i<4; i++) {
+        total_ctx_swtch_times[i] = 0.0;
+    }
     maxRequestCount = obj.noOfUsers * obj.maxRequestPerUser;
 }
 
@@ -742,19 +762,19 @@ void EventHandler::manageEvent(Event event){
 
    switch (event.type)
    {
-    case arrival:
+    case ARRIVAL:
         this->arrive(event);
         break;
         
-    case departure:
+    case DEPARTURE:
         this->depart(event);
         break;
 
-    case contextSwitchInEvent:
+    case CONTEXTSWITCHIN:
         contextSwitchIn(event);
         break;
     
-    case contextSwitchOutEvent:
+    case CONTEXTSWITCHOUT:
         contextSwitchOut(event);
         break;
 
@@ -794,14 +814,14 @@ void EventHandler::arrive(Event X){
 
         int requestCount = this->genNewEventId();
         if(requestCount <= maxRequestCount){
-            // make the Event object ready of arrival
+            // make the Event object ready of ARRIVAL
             Event obj = Event();
             obj.objectId=++userCount;
             obj.arrivalTime = gblSystemTime+obj.getRandomThinkTime();
             obj.eventId = requestCount;
-            obj.type = arrival;
+            obj.type = ARRIVAL;
             obj.serviceTime = this->serverObj.serviceTimeObj.getServiceTime();
-            obj.eventServiceTime = this->serverObj.serviceTimeObj.getServiceTime();
+            obj.eventServiceTime = obj.serviceTime;
             obj.timeout = gblSystemTime + this->timeoutObj.getTimeout();
             obj.request_count  =1;
             obj.response_count =0;
@@ -810,9 +830,9 @@ void EventHandler::arrive(Event X){
         }
     }
     // in case server is busy push the event X in the wait buffer of the server
-    if(this->serverObj.getServerStatus()==Busy){
+    if(this->serverObj.getServerStatus()==BUSY){
 
-        if(this->serverObj.getBufferStatus()==Full){
+        if(this->serverObj.getBufferStatus()==FULL){
             request_drops++;
         }
         else {
@@ -827,7 +847,7 @@ void EventHandler::arrive(Event X){
         nextAvailableTime = max(serverObj.coreObj[freeCore].getNextCoreAvailableTime(), gblSystemTime);
         X.core = freeCore;
         X.contextSwitchInTime = nextAvailableTime + CONTEXT_SWITCH_TIME;
-        X.type = contextSwitchInEvent;
+        X.type = CONTEXTSWITCHIN;
         serverObj.coreObj[freeCore].addToThread(X);
         X.thread = this->serverObj.coreObj[freeCore].getBUsyThreadCount();
         // send the event to the event queue
@@ -846,7 +866,7 @@ void EventHandler::depart(Event X){
     this->serverObj.coreObj[X.core].removeFromThread();
 
     // get next request in the server buffer and assign it to a core
-    if(this->serverObj.getBufferStatus() != Empty){
+    if(this->serverObj.getBufferStatus() != EMPTY){
         Event A =  this->serverObj.getNextEvent();
         int freeCore = -1;
         freeCore = this->serverObj.getFreeCore();
@@ -854,7 +874,7 @@ void EventHandler::depart(Event X){
         nextAvialableTime = max(serverObj.coreObj[freeCore].getNextCoreAvailableTime(), gblSystemTime);
         A.core = freeCore;
         A.contextSwitchInTime = nextAvialableTime + CONTEXT_SWITCH_TIME;
-        A.type = contextSwitchInEvent;
+        A.type = CONTEXTSWITCHIN;
         serverObj.coreObj[freeCore].addToThread(A);
         A.thread = this->serverObj.coreObj[freeCore].getBUsyThreadCount();
         this->setEvent(A.contextSwitchInTime,A);
@@ -863,15 +883,17 @@ void EventHandler::depart(Event X){
     // if response is under the timeout of the request then generate new request
     if(X.departureTime < X.timeout){
         X.response_count++;
-        report(X);
+        // report(X);
+        this->eventCount[X.objectId-1][0] = X.request_count;
+        this->eventCount[X.objectId-1][1] = X.response_count;
         int requestCount = this->genNewEventId();
         if(requestCount <= maxRequestCount){
             X.eventId = requestCount;
-            X.type = arrival;
+            X.type = ARRIVAL;
             X.timeout = gblSystemTime + this->timeoutObj.getTimeout();
             X.arrivalTime = gblSystemTime+X.getRandomThinkTime();
             X.serviceTime = this->serverObj.serviceTimeObj.getServiceTime();
-            X.eventServiceTime = this->serverObj.serviceTimeObj.getServiceTime();
+            X.eventServiceTime = X.serviceTime;
             X.departureTime = 0;
             X.waitingTime =0 ;
             X.core = 0;
@@ -880,9 +902,9 @@ void EventHandler::depart(Event X){
             this->setEvent(X.arrivalTime,X);  
         }
     }
-    // if departure of event X happens after the timeout value the user will wont respond to the request and will regenrate the request
+    // if DEPARTURE of event X happens after the timeout value the user will wont respond to the request and will regenrate the request
     else{
-        X.type = arrival;
+        X.type = ARRIVAL;
         X.arrivalTime = gblSystemTime+X.getRandomThinkTime();
         X.timeout = gblSystemTime + this->timeoutObj.getTimeout();
         X.departureTime = 0;
@@ -901,12 +923,14 @@ void EventHandler::depart(Event X){
  */
 void EventHandler::contextSwitchOut(Event X){
 
+    this->total_ctx_swtch_times[X.core]+= CONTEXT_SWITCH_TIME;
+
     // remove the core from the process thread of the core
     this->serverObj.coreObj[X.core].removeFromThread();
     double nextAvailableTime = 0.0;
     nextAvailableTime = max(serverObj.coreObj[X.core].getNextCoreAvailableTime(), gblSystemTime);
     X.contextSwitchInTime = nextAvailableTime + CONTEXT_SWITCH_TIME;
-    X.type = contextSwitchInEvent;
+    X.type = CONTEXTSWITCHIN;
     this->serverObj.coreObj[X.core].addToThread(X);
     // assign it next context switch in time and push it back in the queue.
     this->setEvent(X.contextSwitchInTime, X);
@@ -923,16 +947,16 @@ void EventHandler::contextSwitchIn(Event X){
     if (X.serviceTime > TIME_QUANTUM) {
         X.serviceTime -= TIME_QUANTUM;
         X.contextSwitchOutTime = gblSystemTime + TIME_QUANTUM;
-        X.type = contextSwitchOutEvent;
+        X.type = CONTEXTSWITCHOUT;
         this->setEvent(X.contextSwitchOutTime, X);
     }
-    // of the remaining service time is less than the time quantum assign the departure time 
+    // of the remaining service time is less than the time quantum assign the DEPARTURE time 
     else {
-        X.departureTime = gblSystemTime + X.eventServiceTime;
+        X.departureTime = gblSystemTime + X.serviceTime;
         X.waitingTime = (X.departureTime - X.arrivalTime) - X.eventServiceTime;
         meanWaitingTime += X.waitingTime;
         meanResponseTime += X.departureTime - X.arrivalTime; 
-        X.type = departure;
+        X.type = DEPARTURE;
         this->setEvent(X.departureTime,X);
     } 
 }
@@ -978,10 +1002,10 @@ void Simulation::initialize(){
     Event obj = Event();
     obj.eventId = eventHandlerObj.genNewEventId();
     obj.arrivalTime = eventHandlerObj.gblSystemTime;
-    obj.type = arrival;
+    obj.type = ARRIVAL;
     obj.timeout = eventHandlerObj.gblSystemTime + eventHandlerObj.timeoutObj.getTimeout();
     obj.serviceTime = eventHandlerObj.serverObj.serviceTimeObj.getServiceTime();
-    obj.eventServiceTime = eventHandlerObj.serverObj.serviceTimeObj.getServiceTime();
+    obj.eventServiceTime = obj.serviceTime;
     obj.contextSwitchInTime = 0.0;
     obj.contextSwitchOutTime = 0.0;
     obj.request_count=1;
@@ -1014,14 +1038,14 @@ void readFromFile (UserData * obj) {
     indata >> obj->meanTimeoutTime;
     indata >> num;
     switch(num) {
-        case Exponential:
-            obj->serviceTimeDistribution = Exponential;
+        case EXPONENTIAL:
+            obj->serviceTimeDistribution = EXPONENTIAL;
             break;
-        case Uniform:
-            obj->serviceTimeDistribution = Uniform;
+        case UNIFORM:
+            obj->serviceTimeDistribution = UNIFORM;
             break;
-        case Constant:
-            obj->serviceTimeDistribution = Constant;
+        case CONSTANT:
+            obj->serviceTimeDistribution = CONSTANT;
             break;
         default:
             cout << "Wrong Distribution" << endl;
@@ -1030,14 +1054,14 @@ void readFromFile (UserData * obj) {
     }
     indata >> num;
     switch(num) {
-        case Exponential:
-            obj->timeotTimeDistribution = Exponential;
+        case EXPONENTIAL:
+            obj->timeotTimeDistribution = EXPONENTIAL;
             break;
-        case Uniform:
-            obj->timeotTimeDistribution = Uniform;
+        case UNIFORM:
+            obj->timeotTimeDistribution = UNIFORM;
             break;
-        case Constant:
-            obj->timeotTimeDistribution = Constant;
+        case CONSTANT:
+            obj->timeotTimeDistribution = CONSTANT;
             break;
         default:
             cout << "Wrong Distribution" << endl;
@@ -1051,8 +1075,8 @@ void readFromFile (UserData * obj) {
     //     case FCFS:
     //         obj.policy = FCFS;
     //         break;
-    //     case roundRobin:
-    //         obj.policy = roundRobin;
+    //     case ROUNDROBIN:
+    //         obj.policy = ROUNDROBIN;
     //         break;
     //     default:
     //         cout << "Wrong Policy";
@@ -1073,18 +1097,18 @@ void manualRead(UserData * obj) {
     cout << "Enter mean Timeout time of request" << endl;
     cin >> obj->meanTimeoutTime;
     cout << "Enter service time distribution eg. 1" << endl;
-    cout << "1. Exponential" << endl << "2. Uniform" << endl << "3. Constant" << endl;
+    cout << "1. EXPONENTIAL" << endl << "2. UNIFORM" << endl << "3. CONSTANT" << endl;
     int a = 0;
     cin >> a;
     switch(a) {
-        case Exponential:
-            obj->serviceTimeDistribution = Exponential;
+        case EXPONENTIAL:
+            obj->serviceTimeDistribution = EXPONENTIAL;
             break;
-        case Uniform:
-            obj->serviceTimeDistribution = Uniform;
+        case UNIFORM:
+            obj->serviceTimeDistribution = UNIFORM;
             break;
-        case Constant:
-            obj->serviceTimeDistribution = Constant;
+        case CONSTANT:
+            obj->serviceTimeDistribution = CONSTANT;
             break;
         default:
             cout << "Wrong Distribution" << endl;
@@ -1092,17 +1116,17 @@ void manualRead(UserData * obj) {
             break;
     }
     cout << "Enter Timeout distribution" << endl;
-    cout << "1. Exponential" << endl << "2. Uniform" << endl << "3. Constant" << endl << "Enter numbers" << endl;
+    cout << "1. EXPONENTIAL" << endl << "2. UNIFORM" << endl << "3. CONSTANT" << endl << "Enter numbers" << endl;
     cin >> a;
     switch(a) {
-        case Exponential:
-            obj->timeotTimeDistribution = Exponential;
+        case EXPONENTIAL:
+            obj->timeotTimeDistribution = EXPONENTIAL;
             break;
-        case Uniform:
-            obj->timeotTimeDistribution = Uniform;
+        case UNIFORM:
+            obj->timeotTimeDistribution = UNIFORM;
             break;
-        case Constant:
-            obj->timeotTimeDistribution = Constant;
+        case CONSTANT:
+            obj->timeotTimeDistribution = CONSTANT;
             break;
         default:
             cout << "Wrong Distribution" << endl;
@@ -1119,8 +1143,8 @@ void manualRead(UserData * obj) {
     //     case FCFS:
     //         obj.policy = FCFS;
     //         break;
-    //     case roundRobin:
-    //         obj.policy = roundRobin;
+    //     case ROUNDROBIN:
+    //         obj.policy = ROUNDROBIN;
     //         break;
     //     default:
     //         cout << "Wrong Policy";
@@ -1154,37 +1178,127 @@ void read(UserData *obj) {
  */
 int main(){
     UserData obj = UserData();
-    read(&obj);
-    // obj.meanServiceTime = 2;
-    // obj.meanTimeoutTime =10;
-    // obj.serviceTimeDistribution = Exponential;
-    // obj.timeotTimeDistribution = Uniform;
-    // obj.noOfUsers = 5;
-    // obj.maxRequestPerUser = 8;
-    obj.policy = roundRobin;
+    // read(&obj);
+    obj.meanServiceTime = 0.2;
+    obj.meanTimeoutTime =15;
+    obj.serviceTimeDistribution = EXPONENTIAL;
+    obj.timeotTimeDistribution = EXPONENTIAL;
+    obj.noOfUsers = 0;
+    obj.maxRequestPerUser = 100;
+    obj.policy = ROUNDROBIN;
     
     outdata.open("outfile.csv");
     outTrace.open("Trace.txt");
+    reportData.open("Report.csv");
 
     outdata << "Even_Id,Arrival_Time,Departure_Time,Waiting_Time,Response_Time,Request_Count,Response_Count,Object_Id" << endl;
 
-    Simulation simObj = Simulation(obj);
-    simObj.initialize();
     
+    
+    cout << "Parameters: " << endl << "1. No. of Cores: 4" << endl << "2. No. of Threads Per Core" << MAX_THREAD_COUNT << endl;
+    cout << "3. Buffer Size: " << MAX_BUFFER_SIZE << endl << "4. Context Switch Time: " << CONTEXT_SWITCH_TIME << endl << "5. Time Quanta: " << TIME_QUANTUM << endl;
+    cout << "6. Mean Serive Time: " << obj.meanServiceTime << endl << "7. Mean Timeout Time: " << obj.meanTimeoutTime << endl;
+    cout << "8. No. of Users: " << obj.noOfUsers << endl << "9. Number of Requests per User: " << obj.maxRequestPerUser << endl << "10. Scheduling Policy: Round Robin" << endl;  
+
+    outTrace << "Parameters: " << endl << "1. No. of Cores: 4" << endl << "2. No. of Threads Per Core" << MAX_THREAD_COUNT << endl;
+    outTrace << "3. Buffer Size: " << MAX_BUFFER_SIZE << endl << "4. Context Switch Time: " << CONTEXT_SWITCH_TIME << endl << "5. Time Quanta: " << TIME_QUANTUM << endl;
+    outTrace << "6. Mean Serive Time: " << obj.meanServiceTime << endl << "7. Mean Timeout Time: " << obj.meanTimeoutTime << endl;
+    outTrace << "8. No. of Users: " << obj.noOfUsers << endl << "9. Number of Requests per User: " << obj.maxRequestPerUser << endl << "10. Scheduling Policy: Round Robin" << endl;  
+
+
     cout << "Global System Time\t" << "Core Status\t" << "Server Buffer Top Element\t" << "Next Event Type\t" << "Next Event Time" << endl;
 
-    while(simObj.eventHandlerObj.IsNextEventTimeBufferEmpty()==false){
-        timeEventTuple x = simObj.eventHandlerObj.getNextEvent();
-        simObj.eventHandlerObj.printState(x);
-        simObj.time(x);
-        simObj.eventHandlerObj.manageEvent(x.eventObj);
-    }
+    int variable_users = 30;
+    int runs = 5;
 
-    outTrace << "Mean Waiting Time = " << meanWaitingTime/simObj.eventHandlerObj.eventIdSeed << endl;
-    outTrace << "Mean Response Time = " << meanResponseTime/simObj.eventHandlerObj.eventIdSeed << endl;
-    outTrace << "Total Request Drops = " << request_drops << endl;
-    cout << "Total Request Drops = " << request_drops << endl;
-    cout << "Mean Waiting Time = " << meanWaitingTime/simObj.eventHandlerObj.eventIdSeed << endl;
-    cout << "Mean Response Time = " << meanResponseTime/simObj.eventHandlerObj.eventIdSeed << endl;
+    reportData << "noOfUsers,minRes,maxRes,meanRes,core1,core2,core3,core4,requestDrop,badput,goodput,throughput\n";
+
+    for (int l = 0; l < variable_users; l++) {
+        double finalMeanWaitingTime = 0.0;
+        double finalResponseTime = 0.0;
+        double finalBadput = 0.0;
+        double finalGoodput = 0.0;
+        double finalThroughput = 0.0;
+        double mean_request_drops = 0;
+        double per_core_util[CORE_COUNT] = {0.0, 0.0, 0.0, 0.0};
+        obj.noOfUsers += 10;
+
+        double waitingArray[5];
+
+        for (int k = 0; k<runs; k++) {
+            meanWaitingTime = 0.0;
+            meanResponseTime = 0.0;
+            request_drops = 0;
+            Simulation simObj = Simulation(obj);
+            simObj.initialize();
+            double prev_time = 0.0;
+            double core_util = 0.0;
+            double core_thread_util[CORE_COUNT] = {0.0, 0.0, 0.0, 0.0};
+
+            while(simObj.eventHandlerObj.IsNextEventTimeBufferEmpty()==false){
+                timeEventTuple x = simObj.eventHandlerObj.getNextEvent();
+                // simObj.eventHandlerObj.printState(x);
+                simObj.time(x);
+                simObj.eventHandlerObj.manageEvent(x.eventObj);
+                double diff = x.eventTime - prev_time;
+                prev_time = x.eventTime;
+                for (int i = 0; i<CORE_COUNT; i++) {
+                    if (simObj.eventHandlerObj.serverObj.coreObj[i].getCoreStatus() != IDLE) 
+                        core_thread_util[i] += diff; //* (simObj.eventHandlerObj.serverObj.coreObj[i].getBUsyThreadCount()/MAX_THREAD_COUNT);
+                }
+            }
+
+            int total_request_count = 0, total_response_count = 0;
+
+            for (int i = 0; i < obj.noOfUsers; i++) {
+                total_request_count += simObj.eventHandlerObj.eventCount[i][0];
+                total_response_count += simObj.eventHandlerObj.eventCount[i][1];
+            } 
+
+            int retries = total_request_count - total_response_count;
+            int not_timedout = total_response_count - retries;
+
+            double badput = (retries*1.0)/simObj.eventHandlerObj.gblSystemTime;
+            double goodput = (not_timedout*1.0)/simObj.eventHandlerObj.gblSystemTime; 
+            double throughput = (total_request_count * 1.0)/simObj.eventHandlerObj.gblSystemTime;
+
+            waitingArray[k] = meanResponseTime/simObj.eventHandlerObj.maxRequestCount;
+            // finalMeanWaitingTime += meanWaitingTime/simObj.eventHandlerObj.eventIdSeed;
+            finalResponseTime += meanResponseTime/simObj.eventHandlerObj.maxRequestCount;
+
+            finalBadput += badput; finalGoodput += goodput; finalThroughput += throughput;
+
+            mean_request_drops += request_drops;
+
+            for (int i = 0; i<CORE_COUNT; i++) {
+                per_core_util[i] += (core_thread_util[i] - simObj.eventHandlerObj.total_ctx_swtch_times[i])/simObj.eventHandlerObj.gblSystemTime;
+            }
+
+        }
+        
+        reportData << obj.noOfUsers << ",";
+        double minRes = 10000, maxRes = 0.0;
+
+        for (int p = 0; p < 5; p++) {
+            minRes = minRes > waitingArray[p] ? waitingArray[p] : minRes;
+            maxRes = maxRes < waitingArray[p] ? waitingArray[p] : maxRes;
+        }
+        reportData << minRes << "," << maxRes << ",";
+        reportData << finalResponseTime/5 << ",";
+        for (int i = 0; i<CORE_COUNT; i++) {
+            reportData << per_core_util[i]/5 << ",";
+        }
+        reportData << mean_request_drops/5 << "," << finalBadput/5 << "," << finalGoodput/5 << "," << finalThroughput/5 << endl;
+        
+    }
+         
+
+
+    // outTrace << "Mean Waiting Time = " << meanWaitingTime/simObj.eventHandlerObj.eventIdSeed << endl;
+    // outTrace << "Mean Response Time = " << meanResponseTime/simObj.eventHandlerObj.eventIdSeed << endl;
+    // outTrace << "Total Request Drops = " << request_drops << endl;
+    // cout << "Total Request Drops = " << request_drops << endl;
+    // cout << "Mean Waiting Time = " << meanWaitingTime/simObj.eventHandlerObj.eventIdSeed << endl;
+    // cout << "Mean Response Time = " << meanResponseTime/simObj.eventHandlerObj.eventIdSeed << endl;
     return 0;
 }

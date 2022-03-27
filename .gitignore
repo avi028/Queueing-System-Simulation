@@ -1,3 +1,7 @@
 .vscode
 a.out
 a.exe
+EventHandler.exe
+*.csv
+*.txt
+data
