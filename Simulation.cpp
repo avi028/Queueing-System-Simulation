@@ -1156,7 +1156,7 @@ void metricCalculation(UserData obj, int users) {
     
     int runs = 5;
     int step_value = 10;
-    reportData << "noOfUsers,minRes,maxRes,meanRes,core1,core2,core3,core4,requestDrop,badput,goodput,throughput\n";
+    reportData << "noOfUsers,minRes,maxRes,meanRes,core1,core2,core3,core4,cpu,requestDrop,badput,goodput,throughput\n";
 
     /* Run for different number of users */
     for (int l = 1; l*step_value <= users; l++) {
@@ -1239,9 +1239,12 @@ void metricCalculation(UserData obj, int users) {
         }
         reportData << minRes << "," << maxRes << ",";
         reportData << finalResponseTime/5 << ",";
+        double cpu_utilisation = 0.0;
         for (int i = 0; i<CORE_COUNT; i++) {
             reportData << per_core_util[i]/5 << ",";
+            cpu_utilisation += per_core_util[i]/5;
         }
+        reportData << cpu_utilisation/4 << ",";
         reportData << mean_request_drops/5 << "," << finalBadput/5 << "," << finalGoodput/5 << "," << finalThroughput/5 << endl;
     }
 }
