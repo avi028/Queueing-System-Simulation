@@ -4,11 +4,11 @@ using std::ifstream;
 
 using namespace std;
 
-#define MAX_USER_COUNT 1000 // maximum number of users allowed 
+#define MAX_USER_COUNT 2000 // maximum number of users allowed 
 #define CORE_COUNT 4 // number of cores in system
 #define CONTEXT_SWITCH_TIME 0 // context switch time
 #define MAX_REQUEST_GENERATED 20 // 
-#define MAX_THREAD_COUNT 1  // Number of cores per thread
+#define MAX_THREAD_COUNT 4  // Number of cores per thread
 #define MAX_BUFFER_SIZE 500 // Server Buffer storage for incoming messages when no core is free
 #define TIME_QUANTUM 1000 // Defined for Round Robin
 
@@ -101,7 +101,7 @@ class Timeout {
 
     Distributions ds;
     double mean_time;
-    int minimum_timeout = 50;
+    int minimum_timeout = 15;
 
     /**
      * @brief Construct a new Timeout object
@@ -833,6 +833,15 @@ void EventHandler::arrive(Event X){
 
         if(this->serverObj.getBufferStatus()==FULL){
             request_drops++;
+            X.type = ARRIVAL;
+            X.arrivalTime = gblSystemTime+X.timeout;
+            X.timeout = gblSystemTime + this->timeoutObj.getTimeout();
+            X.departureTime = 0;
+            X.waitingTime = 0;
+            X.core = 0;
+            X.thread = 0;
+            X.request_count += 1;
+            this->setEvent(X.arrivalTime,X);
         }
         else {
             this->serverObj.addEventToBuffer(X);
@@ -1178,7 +1187,7 @@ void read(UserData *obj) {
 int main(){
     UserData obj = UserData();
     // read(&obj);
-    obj.meanServiceTime = 0.23;
+    obj.meanServiceTime = 2;
     obj.meanTimeoutTime = 5;
     obj.serviceTimeDistribution = EXPONENTIAL;
     obj.timeotTimeDistribution = EXPONENTIAL;
@@ -1258,7 +1267,7 @@ int main(){
             int not_timedout = total_response_count - retries;
 
             double badput = (retries*1.0)/simObj.eventHandlerObj.gblSystemTime;
-            double goodput = (not_timedout*1.0)/simObj.eventHandlerObj.gblSystemTime; 
+            double goodput = (total_response_count*1.0)/simObj.eventHandlerObj.gblSystemTime; 
             double throughput = (total_request_count * 1.0)/simObj.eventHandlerObj.gblSystemTime;
 
             waitingArray[k] = meanResponseTime/simObj.eventHandlerObj.maxRequestCount;
