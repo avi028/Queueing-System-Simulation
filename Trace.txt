@@ -1,0 +1,11 @@
+Parameters: 
+1. No. of Cores: 4
+2. No. of Threads Per Core1
+3. Buffer Size: 500
+4. Context Switch Time: 0
+5. Time Quanta: 500
+6. Mean Serive Time: 0.2
+7. Mean Timeout Time: 15
+8. No. of Users: 0
+9. Number of Requests per User: 100
+10. Scheduling Policy: Round Robin

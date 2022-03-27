@@ -10,7 +10,7 @@ using namespace std;
 #define MAX_REQUEST_GENERATED 20 // 
 #define MAX_THREAD_COUNT 1  // Number of cores per thread
 #define MAX_BUFFER_SIZE 500 // Server Buffer storage for incoming messages when no core is free
-#define TIME_QUANTUM 1000 // Defined for Round Robin
+#define TIME_QUANTUM 500 // Defined for Round Robin
 
 
 enum ServerStatus {IDLE = 1, FREE, BUSY}; // 2 states of server
@@ -234,6 +234,7 @@ double Event::getRandomThinkTime(){
     std::uniform_int_distribution<int> dist(4,10);
     auto thinkTime = dist(generator);
     return (double)thinkTime;
+    // return 6.00;
 }
 
 double Event::getRemainingServiceTime(){
@@ -1178,8 +1179,8 @@ void read(UserData *obj) {
 int main(){
     UserData obj = UserData();
     // read(&obj);
-    obj.meanServiceTime = 0.23;
-    obj.meanTimeoutTime = 5;
+    obj.meanServiceTime = 0.2;
+    obj.meanTimeoutTime =15;
     obj.serviceTimeDistribution = EXPONENTIAL;
     obj.timeotTimeDistribution = EXPONENTIAL;
     obj.noOfUsers = 0;
