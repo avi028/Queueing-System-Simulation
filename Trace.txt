@@ -1,0 +1,12 @@
+Parameters: 
+1. No. of Cores: 4
+2. No. of Threads Per Core: 4
+3. Buffer Size: 500
+4. Context Switch Time: 0.1
+5. Time Quanta: 0.5
+6. Mean Serive Time: 2
+7. Mean Timeout Time: 5
+8. No. of Users: 300
+9. Number of Requests per User: 8
+10. Scheduling Policy: Round Robin
+Global System Time	Core Status	Server Buffer Top Element	Next Event Type	Next Event Time
